@@ -3,54 +3,81 @@ _debug_log() {
     echo "[$(date '+%H:%M:%S')] $1" >> /tmp/git-completion-debug.log
 }
 
-# Function to generate test suggestions (without LLM for now)
+# Function to generate test suggestions
 _generate_commit_suggestions() {
-    _debug_log "Generating suggestions..."
-    echo "test: add new feature"
-    _debug_log "Generated test suggestion"
+    cat << 'EOF'
+
+Suggested commit message:
+feat(auth): implement new user authentication system
+- Add OAuth2 integration with Google, GitHub providers
+- Implement MFA support with Time-based OTP
+- Add secure session management and token refresh
+EOF
 }
 
-# Function to check buffer and set suggestion
-_git_commit_buffer_check() {
-    local buf="$BUFFER"
-    _debug_log "\n--- Checking buffer ---"
-    _debug_log "Current buffer: '$buf'"
+# Global state variable
+typeset -g _COMMIT_SUGGESTION=""
+
+# Function to show suggestion
+_show_suggestion() {
+    print -P ""  # New line
+    print -P "%F{8}$1%f"
+}
+
+# Format the complete message for acceptance
+_format_complete_message() {
+    echo "$_COMMIT_SUGGESTION" | awk '
+        BEGIN { first = 1 }
+        /^Suggested commit message:/ { next }
+        /^$/ { if (!first) printf "\n"; next }
+        /^feat/ { first = 0; printf "%s", $0; next }
+        /^-/ { printf "\n%s", $0; next }
+        { print $0 }
+    ' | sed '/^$/d'
+}
+
+# Function to handle the quote character
+_git_commit_quote_handler() {
+    # Insert the quote first
+    zle self-insert
     
-    # Check if we're in a git commit command with an open quote
-    if [[ "$buf" =~ "(git commit|gc) -m \"$" ]]; then
+    local current_buffer="$BUFFER"
+    _debug_log "Buffer after quote: '$current_buffer'"
+    
+    # Check for git commit command
+    if [[ "$current_buffer" =~ "(git commit|gc) -m \"$" ]]; then
         _debug_log "✓ Git commit command detected"
-        local suggestion=$(_generate_commit_suggestions)
-        POSTDISPLAY="$suggestion"
-        _debug_log "Set suggestion: '$suggestion'"
-    else
-        _debug_log "✗ Not a git commit command"
-        POSTDISPLAY=""
-    fi
-    
-    zle reset-prompt
-}
-
-# Create the widget
-function git_commit_suggest() {
-    _git_commit_buffer_check
-}
-
-# Accept suggestion function
-function accept_suggestion() {
-    if [ -n "$POSTDISPLAY" ]; then
-        BUFFER="${BUFFER}${POSTDISPLAY}"
-        POSTDISPLAY=""
+        
+        # Get and show suggestion
+        _COMMIT_SUGGESTION=$(_generate_commit_suggestions)
+        _show_suggestion "$_COMMIT_SUGGESTION"
+        
+        # Force display update
         zle reset-prompt
     fi
 }
 
-# Set up the widgets
-zle -N git_commit_suggest
-zle -N accept_suggestion
-zle -N zle-line-pre-redraw git_commit_suggest
+# Accept suggestion function
+_accept_suggestion() {
+    if [[ -n "$_COMMIT_SUGGESTION" ]]; then
+        # Get the complete formatted message
+        local formatted_message
+        formatted_message=$(_format_complete_message)
+        
+        # Update buffer with full message
+        BUFFER="${BUFFER}${formatted_message}"
+        CURSOR=${#BUFFER}
+        zle reset-prompt
+    fi
+}
 
-# Bind keys for accepting suggestion
-bindkey '^I' accept_suggestion     # Tab key
-bindkey '^[[C' accept_suggestion   # Right arrow
+# Create and bind the widgets
+zle -N self-insert-quote _git_commit_quote_handler
+zle -N accept-suggestion _accept_suggestion
+
+# Bind keys
+bindkey '"' self-insert-quote
+bindkey '^I' accept-suggestion     # Tab key
+bindkey '^[[C' accept-suggestion   # Right arrow
 
 _debug_log "Git commit suggestion system loaded at $(date)"
