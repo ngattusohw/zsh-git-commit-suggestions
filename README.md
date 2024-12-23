@@ -12,3 +12,9 @@ Detect git add commands
 Query diff against configured llm and store result for quick viewing experience for user
 configurable llm choice, either local or remote
 set up docs
+
+## How to update the zsh plugin
+
+vim $ZSH_CUSTOM/plugins/git-commit-completion/git-commit-completion.plugin.zsh
+
+To view the debug logs run `cat /tmp/git-completion-debug.log`

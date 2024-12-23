@@ -15,8 +15,34 @@ feat(auth): implement new user authentication system
 EOF
 }
 
-# Global state variable
+# Global state variables
 typeset -g _COMMIT_SUGGESTION=""
+typeset -g _CACHED_STAGED_DIFF=""
+
+# Function to update cached diff when files are staged
+_update_staged_diff() {
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        local new_diff
+        new_diff=$(git diff --staged)
+        if [[ "$new_diff" != "$_CACHED_STAGED_DIFF" ]]; then
+            _CACHED_STAGED_DIFF="$new_diff"
+            _debug_log "Updated cached diff: $(echo "$new_diff" | head -n 1)"
+        fi
+    fi
+}
+
+# Hook function to run after git commands
+_git_command_hook() {
+    local cmd="$1"
+    if [[ "$cmd" == "git add"* || "$cmd" == "ga"* ]]; then
+        _debug_log "Git add detected, updating diff cache"
+        _update_staged_diff
+    fi
+}
+
+# Add the hook to precmd for constant monitoring
+autoload -U add-zsh-hook
+add-zsh-hook preexec _git_command_hook
 
 # Function to show suggestion
 _show_suggestion() {
@@ -40,18 +66,18 @@ _format_complete_message() {
 _git_commit_quote_handler() {
     # Insert the quote first
     zle self-insert
-    
+
     local current_buffer="$BUFFER"
     _debug_log "Buffer after quote: '$current_buffer'"
-    
+
     # Check for git commit command
     if [[ "$current_buffer" =~ "(git commit|gc) -m \"$" ]]; then
         _debug_log "✓ Git commit command detected"
-        
+
         # Get and show suggestion
         _COMMIT_SUGGESTION=$(_generate_commit_suggestions)
         _show_suggestion "$_COMMIT_SUGGESTION"
-        
+
         # Force display update
         zle reset-prompt
     fi
@@ -63,7 +89,7 @@ _accept_suggestion() {
         # Get the complete formatted message
         local formatted_message
         formatted_message=$(_format_complete_message)
-        
+
         # Update buffer with full message
         BUFFER="${BUFFER}${formatted_message}"
         CURSOR=${#BUFFER}
