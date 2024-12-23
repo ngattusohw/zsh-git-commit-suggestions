@@ -15,6 +15,10 @@ set up docs
 
 ## How to update the zsh plugin
 
-vim $ZSH_CUSTOM/plugins/git-commit-completion/git-commit-completion.plugin.zsh
+`vim $ZSH_CUSTOM/plugins/git-commit-completion/git-commit-completion.plugin.zsh`
 
 To view the debug logs run `cat /tmp/git-completion-debug.log`
+
+after making changes, run `source ~/.zshrc` to reload the plugin
+
+after every run, delete the debug log file `rm /tmp/git-completion-debug.log  # Clear old logs`

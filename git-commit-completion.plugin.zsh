@@ -28,6 +28,7 @@ _update_staged_diff() {
             _CACHED_STAGED_DIFF="$new_diff"
             _debug_log "Updated cached diff: $(echo "$new_diff" | head -n 1)"
         fi
+        _debug_log "Cached diff: $_CACHED_STAGED_DIFF"
     fi
 }
 
