@@ -65,3 +65,63 @@ If the current approach proves problematic, we could implement a more robust sol
 - Configurable delay times
 
 For now, the delay-based approach provides the best balance of reliability and simplicity.
+
+## Implementation Details
+
+### Git Staging Detection
+
+...
+
+### Suggestion State Management
+
+The plugin uses a state-based system to handle different stages of commit message generation and display appropriate feedback to users.
+
+#### States
+
+- **UNCONFIGURED**: No LLM configuration detected
+
+  - Displays: `⚠ LLM not configured. Run git-suggest-config to set up.`
+  - Occurs when neither API token nor local LLM path is set
+
+- **LOADING**: Generating suggestion
+
+  - Displays: `⟳ Generating commit suggestion...`
+  - Shows when waiting for LLM response
+
+- **ERROR**: Something went wrong
+
+  - Displays: `✖ Error generating suggestion: [error message]`
+  - Common cases: no staged changes, LLM API errors
+
+- **READY**: Suggestion available
+  - Displays: The formatted commit message suggestion
+  - Normal operation state
+
+#### User Experience
+
+Users will see different colored indicators based on the state:
+
+- Yellow (⚠) for configuration warnings
+- Blue (⟳) for loading states
+- Red (✖) for errors
+- Normal text for suggestions
+
+#### Configuration
+
+Users can configure their LLM preference using `git-suggest-config`:
+
+1. OpenAI API
+2. Anthropic API
+3. Local LLM
+
+The configuration command will guide users through setting up their preferred option.
+
+#### State Flow
+
+1. Plugin checks for configuration on load
+2. When files are staged, diff is cached
+3. On `git commit -m "`, plugin:
+   - Verifies configuration
+   - Checks for staged changes
+   - Generates suggestion if all prerequisites met
+   - Shows appropriate state message to user

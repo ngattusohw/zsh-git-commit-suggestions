@@ -5,6 +5,22 @@ _debug_log() {
 
 # Function to generate test suggestions
 _generate_commit_suggestions() {
+    # If not configured, early return
+    if [[ -z "$SUGGEST_LLM_TOKEN" && -z "$SUGGEST_LLM_PATH" ]]; then
+        _SUGGESTION_STATE="UNCONFIGURED"
+        return 1
+    fi
+
+    # If no cached diff, show error
+    if [[ -z "$_CACHED_STAGED_DIFF" ]]; then
+        _SUGGESTION_STATE="ERROR"
+        _SUGGESTION_ERROR="No staged changes detected"
+        return 1
+    fi
+
+    # TODO: Replace this with actual LLM call
+    # Temporary hardcoded response for testing
+    _SUGGESTION_STATE="READY"
     cat << 'EOF'
 
 Suggested commit message:
@@ -18,6 +34,9 @@ EOF
 # Global state variables
 typeset -g _COMMIT_SUGGESTION=""
 typeset -g _CACHED_STAGED_DIFF=""
+# Suggestion states
+typeset -g _SUGGESTION_STATE="UNCONFIGURED"  # UNCONFIGURED, LOADING, ERROR, READY
+typeset -g _SUGGESTION_ERROR=""
 
 # Function to update cached diff when files are staged
 _update_staged_diff() {
@@ -62,7 +81,20 @@ add-zsh-hook preexec _git_command_hook
 # Function to show suggestion
 _show_suggestion() {
     print -P ""  # New line
-    print -P "%F{8}$1%f"
+    case $_SUGGESTION_STATE in
+        "UNCONFIGURED")
+            print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
+            ;;
+        "LOADING")
+            print -P "%F{blue}⟳ Generating commit suggestion...%f"
+            ;;
+        "ERROR")
+            print -P "%F{red}✖ Error generating suggestion: $_SUGGESTION_ERROR%f"
+            ;;
+        "READY")
+            print -P "%F{8}$1%f"
+            ;;
+    esac
 }
 
 # Format the complete message for acceptance
@@ -122,3 +154,36 @@ bindkey '^I' accept-suggestion     # Tab key
 bindkey '^[[C' accept-suggestion   # Right arrow
 
 _debug_log "Git commit suggestion system loaded at $(date)"
+
+# New function to handle configuration (add at end of file)
+_git_suggest_config() {
+    echo "Configuration options:"
+    echo "1. OpenAI API"
+    echo "2. Anthropic API"
+    echo "3. Local LLM"
+    read "choice?Select option (1-3): "
+
+    case $choice in
+        1)
+            read "token?Enter OpenAI API token: "
+            export SUGGEST_LLM_TOKEN="$token"
+            ;;
+        2)
+            read "token?Enter Anthropic API token: "
+            export SUGGEST_LLM_TOKEN="$token"
+            ;;
+        3)
+            read "path?Enter path to local LLM: "
+            export SUGGEST_LLM_PATH="$path"
+            ;;
+        *)
+            echo "Invalid option"
+            return 1
+            ;;
+    esac
+
+    echo "Configuration saved!"
+}
+
+# Add configuration command (add at end of file)
+alias git-suggest-config='_git_suggest_config'
