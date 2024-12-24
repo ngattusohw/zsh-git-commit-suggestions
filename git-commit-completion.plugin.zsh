@@ -22,22 +22,36 @@ typeset -g _CACHED_STAGED_DIFF=""
 # Function to update cached diff when files are staged
 _update_staged_diff() {
     if git rev-parse --is-inside-work-tree &>/dev/null; then
+        _debug_log "Checking for staged changes..."
         local new_diff
         new_diff=$(git diff --staged)
+
+        # Debug the current state
+        if [[ -z "$new_diff" ]]; then
+            _debug_log "No staged changes detected"
+        fi
+
         if [[ "$new_diff" != "$_CACHED_STAGED_DIFF" ]]; then
             _CACHED_STAGED_DIFF="$new_diff"
-            _debug_log "Updated cached diff: $(echo "$new_diff" | head -n 1)"
+            if [[ -n "$new_diff" ]]; then
+                _debug_log "Updated cached diff: $(echo "$new_diff" | head -n 1)"
+                _debug_log "Cached diff: $_CACHED_STAGED_DIFF"
+            fi
+        else
+            _debug_log "Diff unchanged from previous state"
         fi
-        _debug_log "Cached diff: $_CACHED_STAGED_DIFF"
+    else
+        _debug_log "Not in a git repository"
     fi
 }
 
 # Hook function to run after git commands
 _git_command_hook() {
     local cmd="$1"
-    if [[ "$cmd" == "git add"* || "$cmd" == "ga"* ]]; then
-        _debug_log "Git add detected, updating diff cache"
-        _update_staged_diff
+    if [[ "$cmd" == "git add"* || "$cmd" == "ga"* || "$cmd" == "git reset"* ]]; then
+        _debug_log "Git add/reset detected, scheduling diff update"
+        # Add a small delay to ensure git has finished staging
+        (sleep 0.1 && _update_staged_diff &)
     fi
 }
 
