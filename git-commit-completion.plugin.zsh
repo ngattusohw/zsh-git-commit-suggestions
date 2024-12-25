@@ -1,6 +1,9 @@
+# Save original PATH at the start of the script
+typeset -g _ORIGINAL_PATH="$PATH"
+
 # Debug log function with timestamp
 _debug_log() {
-    echo "[$(date '+%H:%M:%S')] $1" >> /tmp/git-completion-debug.log
+    PATH="$_ORIGINAL_PATH" /bin/date +"[%H:%M:%S] $1" >> /tmp/git-completion-debug.log
 }
 
 # Function to manage state changes
@@ -231,10 +234,14 @@ _load_config() {
     return 1
 }
 
+# Function to save configuration
 _save_config() {
     local provider="$1"
     local token="$2"
     local model_path="$3"
+
+    # Restore PATH before running commands
+    PATH="$_ORIGINAL_PATH"
 
     # Create config content
     cat > "$_CONFIG_FILE" << EOF
@@ -258,8 +265,11 @@ EOF
     _debug_log "Configuration saved to $_CONFIG_FILE"
 }
 
-# Update the existing configuration function
+# Update the configuration function
 _git_suggest_config() {
+    # Restore PATH at the start of the function
+    PATH="$_ORIGINAL_PATH"
+
     echo "Git Commit Suggestions Configuration"
     echo "-----------------------------------"
     echo "1. OpenAI API"
@@ -280,6 +290,11 @@ _git_suggest_config() {
             ;;
         3)
             read "path?Enter path to local LLM: "
+            if [[ ! -f "$path" ]]; then
+                echo "Warning: File does not exist at $path"
+                read "continue?Continue anyway? (y/n): "
+                [[ "$continue" != "y" ]] && return 1
+            fi
             _save_config "local" "" "$path"
             ;;
         4)
