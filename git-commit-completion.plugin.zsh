@@ -243,6 +243,13 @@ _save_config() {
     # Restore PATH before running commands
     PATH="$_ORIGINAL_PATH"
 
+    # Convert relative path to absolute path for local LLM
+    if [[ "$provider" == "local" && -n "$model_path" ]]; then
+        # Get absolute path
+        model_path="$(cd "$(dirname "$model_path")" && pwd)/$(basename "$model_path")"
+        _debug_log "Converted path to absolute: $model_path"
+    fi
+
     # Create config content
     cat > "$_CONFIG_FILE" << EOF
 # Git Commit Suggestions Configuration
