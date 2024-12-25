@@ -125,3 +125,24 @@ The configuration command will guide users through setting up their preferred op
    - Checks for staged changes
    - Generates suggestion if all prerequisites met
    - Shows appropriate state message to user
+
+### Configuration Management
+
+The plugin stores configuration in `~/.git-suggest-config`. This file contains:
+
+- LLM provider selection (OpenAI, Anthropic, or Local)
+- API tokens or model paths
+- Additional configuration options
+
+#### Configuration Commands
+
+- `git-suggest-config`: Interactive configuration menu
+  - Set up LLM providers
+  - View current configuration
+  - Clear existing configuration
+
+#### Security
+
+- Configuration file permissions are set to 600 (user read/write only)
+- API tokens are stored locally
+- No remote transmission of tokens except to chosen LLM provider

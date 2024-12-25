@@ -3,24 +3,102 @@ _debug_log() {
     echo "[$(date '+%H:%M:%S')] $1" >> /tmp/git-completion-debug.log
 }
 
+# Function to manage state changes
+_set_suggestion_state() {
+    local new_state="$1"
+    local error_msg="$2"
+
+    typeset -g _SUGGESTION_STATE="$new_state"
+    if [[ -n "$error_msg" ]]; then
+        typeset -g _SUGGESTION_ERROR="$error_msg"
+    else
+        typeset -g _SUGGESTION_ERROR=""
+    fi
+
+    _debug_log "State changed to: $_SUGGESTION_STATE${error_msg:+ ($error_msg)}"
+}
+
+# Global state variables
+typeset -g _CONFIG_FILE="${HOME}/.git-suggest-config"
+typeset -g _COMMIT_SUGGESTION=""
+typeset -g _CACHED_STAGED_DIFF=""
+# Suggestion states
+typeset -g _SUGGESTION_STATE="UNCONFIGURED"  # UNCONFIGURED, LOADING, ERROR, READY
+typeset -g _SUGGESTION_ERROR=""
+_debug_log "Initial state setup - State: $_SUGGESTION_STATE, Diff cached: ${_CACHED_STAGED_DIFF:+yes}"
+
+# Function to update staged diff when files are staged
+_update_staged_diff() {
+    _debug_log "Starting diff update"
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        _debug_log "Checking for staged changes..."
+        local new_diff
+        new_diff=$(git diff --staged)
+
+        # Debug the current state
+        if [[ -z "$new_diff" ]]; then
+            _debug_log "No staged changes detected"
+            typeset -g _CACHED_STAGED_DIFF=""
+            return 1
+        fi
+
+        _debug_log "Current cached diff: ${_CACHED_STAGED_DIFF:+exists}"
+        _debug_log "New diff: ${new_diff:+exists}"
+
+        if [[ "$new_diff" != "$_CACHED_STAGED_DIFF" ]]; then
+            typeset -g _CACHED_STAGED_DIFF="$new_diff"
+            _debug_log "Updated cached diff: ${_CACHED_STAGED_DIFF:+exists}"
+        fi
+    fi
+}
+
 # Function to generate test suggestions
 _generate_commit_suggestions() {
-    # If not configured, early return
-    if [[ -z "$SUGGEST_LLM_TOKEN" && -z "$SUGGEST_LLM_PATH" ]]; then
-        _SUGGESTION_STATE="UNCONFIGURED"
+    _debug_log "=== Starting suggestion generation ==="
+    _debug_log "Current state: $_SUGGESTION_STATE"
+    _debug_log "Current diff cache: ${_CACHED_STAGED_DIFF:+exists}"
+
+    if [[ -z "$SUGGEST_PROVIDER" ]]; then
+        _set_suggestion_state "UNCONFIGURED"
+        _debug_log "State change -> UNCONFIGURED (no provider)"
         return 1
     fi
 
-    # If no cached diff, show error
+    # Validate provider-specific configuration
+    case $SUGGEST_PROVIDER in
+        "openai"|"anthropic")
+            if [[ -z "$SUGGEST_LLM_TOKEN" ]]; then
+                _set_suggestion_state "ERROR" "No API token configured for $SUGGEST_PROVIDER"
+                _debug_log "State change -> ERROR (no token)"
+                return 1
+            fi
+            ;;
+        "local")
+            if [[ -z "$SUGGEST_LLM_PATH" ]]; then
+                _set_suggestion_state "ERROR" "No model path configured"
+                _debug_log "State change -> ERROR (no path)"
+                return 1
+            fi
+            ;;
+    esac
+
+    _set_suggestion_state "READY"
+    _debug_log "State change -> READY (config valid)"
+
+    _debug_log "Diff content length: ${#_CACHED_STAGED_DIFF}"
+    if [[ -n "$_CACHED_STAGED_DIFF" ]]; then
+        _debug_log "Diff preview: $(echo "$_CACHED_STAGED_DIFF" | head -n 1)"
+    fi
+
     if [[ -z "$_CACHED_STAGED_DIFF" ]]; then
-        _SUGGESTION_STATE="ERROR"
-        _SUGGESTION_ERROR="No staged changes detected"
+        _set_suggestion_state "ERROR" "No staged changes detected"
+        _debug_log "State change -> ERROR (no diff)"
         return 1
     fi
 
     # TODO: Replace this with actual LLM call
     # Temporary hardcoded response for testing
-    _SUGGESTION_STATE="READY"
+    _debug_log "Ready to generate suggestion"
     cat << 'EOF'
 
 Suggested commit message:
@@ -31,46 +109,16 @@ feat(auth): implement new user authentication system
 EOF
 }
 
-# Global state variables
-typeset -g _COMMIT_SUGGESTION=""
-typeset -g _CACHED_STAGED_DIFF=""
-# Suggestion states
-typeset -g _SUGGESTION_STATE="UNCONFIGURED"  # UNCONFIGURED, LOADING, ERROR, READY
-typeset -g _SUGGESTION_ERROR=""
-
-# Function to update cached diff when files are staged
-_update_staged_diff() {
-    if git rev-parse --is-inside-work-tree &>/dev/null; then
-        _debug_log "Checking for staged changes..."
-        local new_diff
-        new_diff=$(git diff --staged)
-
-        # Debug the current state
-        if [[ -z "$new_diff" ]]; then
-            _debug_log "No staged changes detected"
-        fi
-
-        if [[ "$new_diff" != "$_CACHED_STAGED_DIFF" ]]; then
-            _CACHED_STAGED_DIFF="$new_diff"
-            if [[ -n "$new_diff" ]]; then
-                _debug_log "Updated cached diff: $(echo "$new_diff" | head -n 1)"
-                _debug_log "Cached diff: $_CACHED_STAGED_DIFF"
-            fi
-        else
-            _debug_log "Diff unchanged from previous state"
-        fi
-    else
-        _debug_log "Not in a git repository"
-    fi
-}
-
 # Hook function to run after git commands
 _git_command_hook() {
     local cmd="$1"
     if [[ "$cmd" == "git add"* || "$cmd" == "ga"* || "$cmd" == "git reset"* ]]; then
-        _debug_log "Git add/reset detected, scheduling diff update"
-        # Add a small delay to ensure git has finished staging
-        (sleep 0.1 && _update_staged_diff &)
+        _debug_log "Git command detected: $cmd"
+        # Remove the subshell and just add a small delay
+        sleep 0.1
+        _debug_log "Running diff update"
+        _update_staged_diff
+        _debug_log "After update - Diff cached: ${_CACHED_STAGED_DIFF:+yes}"
     fi
 }
 
@@ -81,6 +129,7 @@ add-zsh-hook preexec _git_command_hook
 # Function to show suggestion
 _show_suggestion() {
     print -P ""  # New line
+    _debug_log "Current state when showing suggestion: $_SUGGESTION_STATE"
     case $_SUGGESTION_STATE in
         "UNCONFIGURED")
             print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
@@ -92,7 +141,11 @@ _show_suggestion() {
             print -P "%F{red}✖ Error generating suggestion: $_SUGGESTION_ERROR%f"
             ;;
         "READY")
-            print -P "%F{8}$1%f"
+            if [[ -n "$1" ]]; then
+                print -P "%F{8}$1%f"
+            else
+                print -P "%F{yellow}No suggestion available%f"
+            fi
             ;;
     esac
 }
@@ -155,17 +208,25 @@ bindkey '^[[C' accept-suggestion   # Right arrow
 
 _debug_log "Git commit suggestion system loaded at $(date)"
 
-# Add near the top with other global variables
-typeset -g _CONFIG_FILE="${HOME}/.git-suggest-config"
-
 # Configuration management functions
 _load_config() {
+    _debug_log "=== Loading configuration ==="
     if [[ -f "$_CONFIG_FILE" ]]; then
         # Source the config file to load variables
         source "$_CONFIG_FILE"
-        _debug_log "Configuration loaded from $_CONFIG_FILE"
+        _debug_log "Loaded config - Provider: $SUGGEST_PROVIDER, Token: ${SUGGEST_LLM_TOKEN:+set}"
+
+        # Set initial state based on configuration
+        if [[ -n "$SUGGEST_PROVIDER" && -n "$SUGGEST_LLM_TOKEN" ]]; then
+            _set_suggestion_state "READY"
+            _debug_log "Initial state set to READY (config valid)"
+        else
+            _set_suggestion_state "UNCONFIGURED"
+            _debug_log "Initial state set to UNCONFIGURED (missing config)"
+        fi
         return 0
     fi
+    _set_suggestion_state "UNCONFIGURED"
     _debug_log "No configuration file found at $_CONFIG_FILE"
     return 1
 }
