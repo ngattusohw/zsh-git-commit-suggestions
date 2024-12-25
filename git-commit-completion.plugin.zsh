@@ -294,7 +294,14 @@ _git_suggest_config() {
         5)
             if [[ -f "$_CONFIG_FILE" ]]; then
                 rm "$_CONFIG_FILE"
+                # Clear environment variables
+                unset SUGGEST_PROVIDER
+                unset SUGGEST_LLM_TOKEN
+                unset SUGGEST_LLM_PATH
+                # Reset state
+                _set_suggestion_state "UNCONFIGURED"
                 echo "Configuration cleared."
+                _debug_log "Configuration cleared and state reset to UNCONFIGURED"
             else
                 echo "No configuration to clear."
             fi
@@ -315,3 +322,4 @@ _load_config
 
 # Add configuration command (add at end of file)
 alias git-suggest-config='_git_suggest_config'
+
