@@ -155,26 +155,89 @@ bindkey '^[[C' accept-suggestion   # Right arrow
 
 _debug_log "Git commit suggestion system loaded at $(date)"
 
-# New function to handle configuration (add at end of file)
+# Add near the top with other global variables
+typeset -g _CONFIG_FILE="${HOME}/.git-suggest-config"
+
+# Configuration management functions
+_load_config() {
+    if [[ -f "$_CONFIG_FILE" ]]; then
+        # Source the config file to load variables
+        source "$_CONFIG_FILE"
+        _debug_log "Configuration loaded from $_CONFIG_FILE"
+        return 0
+    fi
+    _debug_log "No configuration file found at $_CONFIG_FILE"
+    return 1
+}
+
+_save_config() {
+    local provider="$1"
+    local token="$2"
+    local model_path="$3"
+
+    # Create config content
+    cat > "$_CONFIG_FILE" << EOF
+# Git Commit Suggestions Configuration
+# Generated on $(date)
+
+SUGGEST_PROVIDER="$provider"
+EOF
+
+    # Add appropriate configuration based on provider
+    case $provider in
+        "openai"|"anthropic")
+            echo "SUGGEST_LLM_TOKEN=\"$token\"" >> "$_CONFIG_FILE"
+            ;;
+        "local")
+            echo "SUGGEST_LLM_PATH=\"$model_path\"" >> "$_CONFIG_FILE"
+            ;;
+    esac
+
+    chmod 600 "$_CONFIG_FILE"  # Secure the file since it contains tokens
+    _debug_log "Configuration saved to $_CONFIG_FILE"
+}
+
+# Update the existing configuration function
 _git_suggest_config() {
-    echo "Configuration options:"
+    echo "Git Commit Suggestions Configuration"
+    echo "-----------------------------------"
     echo "1. OpenAI API"
     echo "2. Anthropic API"
     echo "3. Local LLM"
-    read "choice?Select option (1-3): "
+    echo "4. View current configuration"
+    echo "5. Clear configuration"
+    read "choice?Select option (1-5): "
 
     case $choice in
         1)
             read "token?Enter OpenAI API token: "
-            export SUGGEST_LLM_TOKEN="$token"
+            _save_config "openai" "$token"
             ;;
         2)
             read "token?Enter Anthropic API token: "
-            export SUGGEST_LLM_TOKEN="$token"
+            _save_config "anthropic" "$token"
             ;;
         3)
             read "path?Enter path to local LLM: "
-            export SUGGEST_LLM_PATH="$path"
+            _save_config "local" "" "$path"
+            ;;
+        4)
+            if [[ -f "$_CONFIG_FILE" ]]; then
+                echo "\nCurrent configuration:"
+                cat "$_CONFIG_FILE"
+            else
+                echo "\nNo configuration found."
+            fi
+            return 0
+            ;;
+        5)
+            if [[ -f "$_CONFIG_FILE" ]]; then
+                rm "$_CONFIG_FILE"
+                echo "Configuration cleared."
+            else
+                echo "No configuration to clear."
+            fi
+            return 0
             ;;
         *)
             echo "Invalid option"
@@ -182,8 +245,12 @@ _git_suggest_config() {
             ;;
     esac
 
-    echo "Configuration saved!"
+    echo "\nConfiguration saved!"
+    _load_config  # Reload the configuration
 }
+
+# Load configuration on plugin start
+_load_config
 
 # Add configuration command (add at end of file)
 alias git-suggest-config='_git_suggest_config'
