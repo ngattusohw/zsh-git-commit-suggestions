@@ -300,7 +300,10 @@ _git_suggest_config() {
             if [[ ! -f "$path" ]]; then
                 echo "Warning: File does not exist at $path"
                 read "continue?Continue anyway? (y/n): "
-                [[ "$continue" != "y" ]] && return 1
+                if [[ "$continue" != "y" ]]; then
+                    PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
+                    return 1
+                fi
             fi
             _save_config "local" "" "$path"
             ;;
@@ -311,6 +314,7 @@ _git_suggest_config() {
             else
                 echo "\nNo configuration found."
             fi
+            PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
             return 0
             ;;
         5)
@@ -327,16 +331,19 @@ _git_suggest_config() {
             else
                 echo "No configuration to clear."
             fi
+            PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
             return 0
             ;;
         *)
             echo "Invalid option"
+            PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
             return 1
             ;;
     esac
 
     echo "\nConfiguration saved!"
     _load_config  # Reload the configuration
+    PATH="$_ORIGINAL_PATH"  # Restore PATH before exiting
 }
 
 # Load configuration on plugin start
