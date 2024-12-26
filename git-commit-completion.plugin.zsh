@@ -177,12 +177,23 @@ _git_commit_quote_handler() {
     if [[ "$current_buffer" =~ "(git commit|gc) -m \"$" ]]; then
         _debug_log "✓ Git commit command detected"
 
+        # Save and change tab binding
+        [[ -z "$_ORIGINAL_TAB_BINDING" ]] && _ORIGINAL_TAB_BINDING=$(bindkey '^I')
+        bindkey '^I' accept-suggestion
+        _debug_log "Temporarily bound Tab to accept-suggestion for git commit"
+
         # Get and show suggestion
         _COMMIT_SUGGESTION=$(_generate_commit_suggestions)
         _show_suggestion "$_COMMIT_SUGGESTION"
 
         # Force display update
         zle reset-prompt
+    else
+        # Restore original tab binding if we're not in a git commit
+        if [[ -n "$_ORIGINAL_TAB_BINDING" ]]; then
+            eval "$_ORIGINAL_TAB_BINDING"
+            _debug_log "Restored original Tab binding"
+        fi
     fi
 }
 
@@ -300,10 +311,7 @@ _git_suggest_config() {
             if [[ ! -f "$path" ]]; then
                 echo "Warning: File does not exist at $path"
                 read "continue?Continue anyway? (y/n): "
-                if [[ "$continue" != "y" ]]; then
-                    PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
-                    return 1
-                fi
+                [[ "$continue" != "y" ]] && return 1
             fi
             _save_config "local" "" "$path"
             ;;
@@ -314,7 +322,6 @@ _git_suggest_config() {
             else
                 echo "\nNo configuration found."
             fi
-            PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
             return 0
             ;;
         5)
@@ -331,19 +338,16 @@ _git_suggest_config() {
             else
                 echo "No configuration to clear."
             fi
-            PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
             return 0
             ;;
         *)
             echo "Invalid option"
-            PATH="$_ORIGINAL_PATH"  # Restore PATH before returning
             return 1
             ;;
     esac
 
     echo "\nConfiguration saved!"
     _load_config  # Reload the configuration
-    PATH="$_ORIGINAL_PATH"  # Restore PATH before exiting
 }
 
 # Load configuration on plugin start
@@ -351,4 +355,7 @@ _load_config
 
 # Add configuration command (add at end of file)
 alias git-suggest-config='_git_suggest_config'
+
+# Add at the top with other global variables
+typeset -g _ORIGINAL_TAB_BINDING=$(bindkey '^I')
 
