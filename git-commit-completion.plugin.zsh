@@ -165,7 +165,32 @@ _format_complete_message() {
     ' | sed '/^$/d'
 }
 
-# Function to handle the quote character
+# Add at the top with other global variables
+typeset -g _ORIGINAL_TAB_BINDING=""
+typeset -g _TAB_BINDING_CHANGED=0
+
+# Function to restore binding
+_restore_tab_binding() {
+    if [[ $_TAB_BINDING_CHANGED -eq 1 ]]; then
+        bindkey '^I' complete-word
+        _TAB_BINDING_CHANGED=0
+        _debug_log "Restored original Tab binding"
+    fi
+}
+
+# Add SIGINT trap
+_handle_interrupt() {
+    _restore_tab_binding
+    # Restore original SIGINT behavior
+    trap - INT
+    # Send SIGINT to the current process
+    kill -INT $$
+}
+
+# Set up the trap
+trap '_handle_interrupt' INT
+
+# Update the quote handler
 _git_commit_quote_handler() {
     # Insert the quote first
     zle self-insert
@@ -177,10 +202,13 @@ _git_commit_quote_handler() {
     if [[ "$current_buffer" =~ "(git commit|gc) -m \"$" ]]; then
         _debug_log "✓ Git commit command detected"
 
-        # Save and change tab binding
-        [[ -z "$_ORIGINAL_TAB_BINDING" ]] && _ORIGINAL_TAB_BINDING=$(bindkey '^I')
-        bindkey '^I' accept-suggestion
-        _debug_log "Temporarily bound Tab to accept-suggestion for git commit"
+        # Save current tab binding if we haven't already
+        if [[ $_TAB_BINDING_CHANGED -eq 0 ]]; then
+            _ORIGINAL_TAB_BINDING=$(bindkey '^I')
+            bindkey '^I' accept-suggestion
+            _TAB_BINDING_CHANGED=1
+            _debug_log "Temporarily bound Tab to accept-suggestion for git commit"
+        fi
 
         # Get and show suggestion
         _COMMIT_SUGGESTION=$(_generate_commit_suggestions)
@@ -188,14 +216,11 @@ _git_commit_quote_handler() {
 
         # Force display update
         zle reset-prompt
-    else
-        # Restore original tab binding if we're not in a git commit
-        if [[ -n "$_ORIGINAL_TAB_BINDING" ]]; then
-            eval "$_ORIGINAL_TAB_BINDING"
-            _debug_log "Restored original Tab binding"
-        fi
     fi
 }
+
+# Add the preexec hook
+add-zsh-hook preexec _restore_tab_binding
 
 # Accept suggestion function
 _accept_suggestion() {
@@ -356,6 +381,8 @@ _load_config
 # Add configuration command (add at end of file)
 alias git-suggest-config='_git_suggest_config'
 
-# Add at the top with other global variables
-typeset -g _ORIGINAL_TAB_BINDING=$(bindkey '^I')
+# Add cleanup on plugin unload if possible
+_cleanup_bindings() {
+    _restore_tab_binding
+}
 
