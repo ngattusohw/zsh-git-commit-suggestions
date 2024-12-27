@@ -146,19 +146,45 @@ EOF
 # Hook function to run after git commands
 _git_command_hook() {
     local cmd="$1"
-    if [[ "$cmd" == "git add"* || "$cmd" == "ga"* || "$cmd" == "git reset"* ]]; then
+    _debug_log "Command received: $cmd"  # Log the exact command
+
+    # Debug pattern matching
+    if [[ "$cmd" =~ ^git[[:space:]]+ ]]; then
         _debug_log "Git command detected: $cmd"
-        # Increase the delay to ensure git has time to process
-        sleep 0.2  # Increased from 0.1
-        _debug_log "Running diff update"
-        _update_staged_diff
-        _debug_log "After update - Diff cached: ${_CACHED_STAGED_DIFF:+yes}"
+    fi
+    if [[ "$cmd" =~ ^ga[[:space:]]+ ]]; then
+        _debug_log "Ga alias detected: $cmd"
+    fi
+
+    # More explicit pattern matching for git add commands
+    if [[ "$cmd" =~ ^(git[[:space:]]+add|ga|git[[:space:]]+reset)[[:space:]]+ || "$cmd" =~ git[[:space:]]+add.*[[:space:]]+ ]]; then
+        _debug_log "Git add command detected: $cmd"
+        typeset -g _LAST_GIT_COMMAND="$cmd"
     fi
 }
 
-# Add the hook to precmd for constant monitoring
+# Function to run after command completion
+_post_git_command() {
+    if [[ -n "$_LAST_GIT_COMMAND" ]]; then
+        _debug_log "Processing completed git command: $_LAST_GIT_COMMAND"
+
+        # Debug git status
+        local git_status=$(git status --porcelain)
+        _debug_log "Git status after command: $git_status"
+
+        _debug_log "Running diff update"
+        _update_staged_diff
+        _debug_log "After update - Diff cached: ${_CACHED_STAGED_DIFF:+yes}"
+
+        # Clear the last command
+        typeset -g _LAST_GIT_COMMAND=""
+    fi
+}
+
+# Add both hooks
 autoload -U add-zsh-hook
 add-zsh-hook preexec _git_command_hook
+add-zsh-hook precmd _post_git_command
 
 # Function to show suggestion
 _show_suggestion() {
