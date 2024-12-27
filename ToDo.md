@@ -13,8 +13,9 @@
 ### LLM Integration
 
 - [x] Create basic LLM provider structure
-- [ ] Complete LLM provider abstraction layer
-- [ ] Implement OpenAI provider
+- [x] Complete LLM provider abstraction layer
+- [x] Implement OpenAI provider (basic functionality)
+- [ ] Enhance OpenAI provider with better error handling
 - [ ] Implement Anthropic provider
 - [x] Add initial local model support
 - [ ] Enhance local model support (model validation, format checking)
@@ -24,18 +25,21 @@
 
 ### Prompt Engineering
 
-- [ ] Design base prompt template
+- [x] Design base prompt template
+- [ ] Extract prompt logic into shared function for all providers
 - [ ] Allow for custom prompt templates
 - [ ] Add repository context to prompts (file types, repo name)
 - [ ] Implement diff size optimization (handle large changes)
 - [ ] Add diff preprocessing for better LLM understanding
 - [ ] Add template validation
+- [ ] Add prompt versioning and migration support
 
 ### Error Handling
 
 - [x] Implement basic state management
 - [x] Add basic error messaging
-- [ ] Add API error handling (rate limits, network issues)
+- [x] Add basic API error handling
+- [ ] Enhance API error handling (rate limits, network issues)
 - [ ] Implement token validation
 - [ ] Add graceful fallbacks for errors
 - [ ] Enhance error messaging with troubleshooting steps
@@ -46,6 +50,8 @@
 
 - [x] Add state-based feedback messages
 - [x] Improve diff detection and caching
+- [ ] Fix loading state display issues
+- [ ] Move suggestion generation to git add for better performance
 - [ ] Add progress indicators for long-running operations
 - [ ] Improve suggestion formatting
 - [ ] Add command to view suggestion history
@@ -53,6 +59,7 @@
 - [x] Add debug logging
 - [ ] Add debug mode toggle for users
 - [ ] Add color configuration options
+- [ ] Add suggestion preview in status bar
 
 ### Testing & Documentation
 
@@ -65,14 +72,17 @@
 - [ ] Create contribution guidelines
 - [ ] Add performance benchmarks
 - [ ] Document debug log format
+- [ ] Add examples of successful prompts and responses
 
 ### Performance & Optimization
 
+- [x] Basic diff caching mechanism
 - [ ] Optimize diff caching mechanism
 - [ ] Add suggestion caching
 - [ ] Implement lazy loading for providers
 - [ ] Add memory usage optimization
 - [ ] Improve startup time
+- [ ] Add background processing for suggestions
 
 ### Security
 
@@ -81,3 +91,4 @@
 - [ ] Implement secure token storage
 - [ ] Add provider-specific security measures
 - [ ] Add security documentation
+- [ ] Add token rotation support
