@@ -116,9 +116,6 @@ _generate_commit_suggestions() {
             ;;
     esac
 
-    _set_suggestion_state "READY"
-    _debug_log "State change -> READY (config valid)"
-
     _debug_log "Diff content length: ${#_CACHED_STAGED_DIFF}"
     if [[ -n "$_CACHED_STAGED_DIFF" ]]; then
         _debug_log "Diff preview: $(echo "$_CACHED_STAGED_DIFF" | head -n 1)"
@@ -130,16 +127,28 @@ _generate_commit_suggestions() {
         return 1
     fi
 
-    # TODO: Replace this with actual LLM call
-    # Temporary hardcoded response for testing
-    _debug_log "Ready to generate suggestion"
-    cat << 'EOF'
+    _set_suggestion_state "LOADING"
+    _debug_log "Calling LLM provider"
+
+    local suggestion
+    suggestion=$(_llm_generate_suggestion "$_CACHED_STAGED_DIFF")
+    local result=$?
+
+    if [[ $result -ne 0 || -z "$suggestion" ]]; then
+        _set_suggestion_state "ERROR" "Failed to generate suggestion"
+        _debug_log "LLM generation failed"
+        _debug_log "State immediately after error: $_SUGGESTION_STATE"
+        return 1
+    fi
+
+    # Only set READY state after successful generation
+    _set_suggestion_state "READY"
+    _debug_log "Successfully generated suggestion"
+
+    cat << EOF
 
 Suggested commit message:
-feat(auth): implement new user authentication system
-- Add OAuth2 integration with Google, GitHub providers
-- Implement MFA support with Time-based OTP
-- Add secure session management and token refresh
+$suggestion
 EOF
 }
 
@@ -259,7 +268,6 @@ _git_commit_quote_handler() {
     if [[ "$current_buffer" =~ "(git commit|gc) -m \"$" ]]; then
         _debug_log "✓ Git commit command detected"
 
-        # Save current tab binding if we haven't already
         if [[ $_TAB_BINDING_CHANGED -eq 0 ]]; then
             _ORIGINAL_TAB_BINDING=$(bindkey '^I')
             bindkey '^I' accept-suggestion
@@ -267,8 +275,12 @@ _git_commit_quote_handler() {
             _debug_log "Temporarily bound Tab to accept-suggestion for git commit"
         fi
 
-        # Get and show suggestion
-        _COMMIT_SUGGESTION=$(_generate_commit_suggestions)
+        _debug_log "State before generating suggestion: $_SUGGESTION_STATE"
+
+        # Run in current shell to preserve state
+        _generate_commit_suggestions > >(read -r suggestion; typeset -g _COMMIT_SUGGESTION="$suggestion")
+
+        _debug_log "State after generating suggestion: $_SUGGESTION_STATE"
         _show_suggestion "$_COMMIT_SUGGESTION"
 
         # Force display update
@@ -441,5 +453,56 @@ alias git-suggest-config='_git_suggest_config'
 # Add cleanup on plugin unload if possible
 _cleanup_bindings() {
     _restore_tab_binding
+}
+
+# LLM Provider Interface
+_llm_generate_suggestion() {
+    local provider="$SUGGEST_PROVIDER"
+    local diff="$1"
+
+    case "$provider" in
+        "openai")
+            _openai_generate "$diff"
+            ;;
+        "anthropic")
+            _anthropic_generate "$diff"
+            ;;
+        "local")
+            _local_generate "$diff"
+            ;;
+        *)
+            _debug_log "Unknown provider: $provider"
+            _set_suggestion_state "ERROR" "Unknown provider: $provider"
+            _debug_log "State change -> ERROR (unknown provider)"
+            return 1
+            ;;
+    esac
+}
+
+# OpenAI Provider Implementation
+_openai_generate() {
+    local diff="$1"
+    _debug_log "Generating suggestion using OpenAI"
+
+    # Will implement the actual OpenAI call here
+    return 1
+}
+
+# Anthropic Provider Implementation
+_anthropic_generate() {
+    local diff="$1"
+    _debug_log "Generating suggestion using Anthropic"
+
+    # Will implement the actual Anthropic call here
+    return 1
+}
+
+# Local LLM Provider Implementation
+_local_generate() {
+    local diff="$1"
+    _debug_log "Generating suggestion using Local LLM"
+
+    # Will implement the actual local LLM call here
+    return 1
 }
 
