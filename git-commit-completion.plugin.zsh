@@ -36,9 +36,40 @@ _update_staged_diff() {
     if git rev-parse --is-inside-work-tree &>/dev/null; then
         _debug_log "Checking for staged changes..."
         local new_diff
+
+        # Debug git status
+        local git_status=$(git status --porcelain)
+        _debug_log "Git status: $git_status"
+
+        # Get both staged changes and new files
         new_diff=$(git diff --staged)
+        _debug_log "Standard diff result: ${new_diff:+exists}"
+
+        local new_files=$(git diff --staged --name-status | grep '^A' || true)
+        _debug_log "Staged files status: $new_files"
+
+        if [[ -n "$new_files" ]]; then
+            _debug_log "New files detected: $new_files"
+            # For new files, get their content
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^A[[:space:]]+(.*) ]]; then
+                    local file="${BASH_REMATCH[1]}"
+                    _debug_log "Getting content for new file: $file"
+                    if [[ -n "$file" && -f "$file" ]]; then
+                        new_diff+=$'\n'"New file: $file"$'\n'
+                        local file_content=$(git show ":${file}" 2>/dev/null || cat "$file" 2>/dev/null)
+                        _debug_log "File content length: ${#file_content}"
+                        new_diff+="$file_content"
+                    else
+                        _debug_log "File not found or empty path: $file"
+                    fi
+                fi
+            done <<< "$new_files"
+        fi
 
         # Debug the current state
+        _debug_log "Final diff length: ${#new_diff}"
+
         if [[ -z "$new_diff" ]]; then
             _debug_log "No staged changes detected"
             typeset -g _CACHED_STAGED_DIFF=""
@@ -117,8 +148,8 @@ _git_command_hook() {
     local cmd="$1"
     if [[ "$cmd" == "git add"* || "$cmd" == "ga"* || "$cmd" == "git reset"* ]]; then
         _debug_log "Git command detected: $cmd"
-        # Remove the subshell and just add a small delay
-        sleep 0.1
+        # Increase the delay to ensure git has time to process
+        sleep 0.2  # Increased from 0.1
         _debug_log "Running diff update"
         _update_staged_diff
         _debug_log "After update - Diff cached: ${_CACHED_STAGED_DIFF:+yes}"
