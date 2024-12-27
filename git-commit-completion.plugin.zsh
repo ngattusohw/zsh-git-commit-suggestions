@@ -141,6 +141,10 @@ _generate_commit_suggestions() {
         return 1
     fi
 
+    # Store suggestion in global variable
+    typeset -g _COMMIT_SUGGESTION="$suggestion"
+    _debug_log "Stored suggestion in global variable: $_COMMIT_SUGGESTION"
+
     # Only set READY state after successful generation
     _set_suggestion_state "READY"
     _debug_log "Successfully generated suggestion"
@@ -199,6 +203,8 @@ add-zsh-hook precmd _post_git_command
 _show_suggestion() {
     print -P ""  # New line
     _debug_log "Current state when showing suggestion: $_SUGGESTION_STATE"
+    _debug_log "Current suggestion: ${_COMMIT_SUGGESTION:+exists}"
+
     case $_SUGGESTION_STATE in
         "UNCONFIGURED")
             print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
@@ -210,8 +216,8 @@ _show_suggestion() {
             print -P "%F{red}✖ Error generating suggestion: $_SUGGESTION_ERROR%f"
             ;;
         "READY")
-            if [[ -n "$1" ]]; then
-                print -P "%F{8}$1%f"
+            if [[ -n "$_COMMIT_SUGGESTION" ]]; then
+                print -P "%F{green}Suggested commit message:%f\n$_COMMIT_SUGGESTION"
             else
                 print -P "%F{yellow}No suggestion available%f"
             fi
@@ -484,8 +490,114 @@ _openai_generate() {
     local diff="$1"
     _debug_log "Generating suggestion using OpenAI"
 
-    # Will implement the actual OpenAI call here
-    return 1
+    # Ensure we have required variables
+    if [[ -z "$SUGGEST_LLM_TOKEN" ]]; then
+        _debug_log "OpenAI token not found"
+        return 1
+    fi
+
+    # Test with minimal request first
+    local test_request='{"model":"gpt-3.5-turbo","messages":[{"role":"system","content":"test"},{"role":"user","content":"test"}]}'
+
+    local test_response
+    test_response=$(curl -s -S -H "Content-Type: application/json" \
+                        -H "Authorization: Bearer $SUGGEST_LLM_TOKEN" \
+                        -d "$test_request" \
+                        "https://api.openai.com/v1/chat/completions" 2>&1)
+
+    _debug_log "Test response: $test_response"
+
+    if [[ "$test_response" == *"error"* ]]; then
+        _debug_log "Test request failed"
+        return 1
+    fi
+
+    # If test passed, proceed with real request
+    # Create a clean version of the diff for JSON
+    local escaped_diff
+    escaped_diff=$(echo "$diff" | LC_ALL=C sed '
+        s/[^[:print:]\n]//g
+        s/\\/\\\\/g
+        s/"/\\"/g
+        s/$/\\n/g
+    ' | tr -d '\r')
+
+    # Debug the escaped content
+    _debug_log "First line of escaped diff: $(echo "$escaped_diff" | head -n1)"
+
+    # Create temporary file for JSON request
+    local tmp_json
+    tmp_json=$(mktemp)
+
+    # Write JSON to temp file
+    cat > "$tmp_json" << EOF
+{
+    "model": "gpt-3.5-turbo",
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that generates concise, conventional commit messages based on git diffs."
+        },
+        {
+            "role": "user",
+            "content": "Generate a commit message for this diff:\n\n${escaped_diff}"
+        }
+    ]
+}
+EOF
+
+    _debug_log "Request JSON file created: $tmp_json"
+    _debug_log "First 100 chars of request: $(head -c 100 "$tmp_json")"
+
+    # Make the API call using the file
+    local response
+    local http_response
+    http_response=$(curl -s -S -i -H "Content-Type: application/json" \
+                        -H "Authorization: Bearer $SUGGEST_LLM_TOKEN" \
+                        -d "@$tmp_json" \
+                        "https://api.openai.com/v1/chat/completions" 2>&1)
+
+    # Clean up temp file
+    rm -f "$tmp_json"
+
+    local result=$?
+    local http_code=$(echo "$http_response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
+    response=$(echo "$http_response" | awk 'BEGIN{RS="\r\n\r\n"} NR==2')
+
+    _debug_log "OpenAI API call result: $result"
+    _debug_log "HTTP Status: $http_code"
+    _debug_log "Response: $response"
+
+    if [[ $result -ne 0 || $http_code -ne 200 ]]; then
+        # Try to extract error message from response
+        local error_message
+        error_message=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
+        if [[ -n "$error_message" ]]; then
+            _debug_log "OpenAI API error: $error_message"
+        fi
+        _debug_log "OpenAI API call failed"
+        return 1
+    fi
+
+    # Extract message using more reliable pattern
+    local message
+    message=$(echo "$response" | grep -o '"content": *"[^"]*"' | cut -d'"' -f4)
+
+    if [[ -z "$message" ]]; then
+        _debug_log "Failed to extract message from response"
+        _debug_log "Response was: $response"
+        return 1
+    fi
+
+    if [[ "$message" == "ERROR: NO_CHANGES" ]]; then
+        _debug_log "LLM reported no changes"
+        return 1
+    fi
+
+    _debug_log "Successfully extracted message: $message"
+    typeset -g _COMMIT_SUGGESTION="$message"  # Store in global variable
+    echo "$message"
+    return 0
 }
 
 # Anthropic Provider Implementation
