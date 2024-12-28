@@ -202,24 +202,21 @@ _post_git_command() {
             local state_file="/tmp/git-suggestion-state-${$}"
             echo "$_CACHED_STAGED_DIFF" > "$tmp_file"
 
-            # Run in background with proper job control handling
+            # Run in background with proper job control handling and output redirection
             {
-                # Redirect all output to prevent job control messages
                 exec 1>/dev/null 2>&1
 
                 source "${0:A}"
-                _load_config  # Ensure configuration is loaded in background process
+                _load_config
                 suggestion=$(_generate_commit_suggestions < "$tmp_file")
                 if [[ -n "$suggestion" ]]; then
-                    # Remove the "Suggested commit message:" prefix before storing
                     suggestion=${suggestion#"Suggested commit message:"}
-                    suggestion=${suggestion#$'\n'}  # Remove leading newline if present
+                    suggestion=${suggestion#$'\n'}
                     echo "$suggestion" > "$state_file"
                 fi
                 rm -f "$tmp_file"
-            } &
+            } 2>/dev/null &
 
-            # Immediately disown the job
             disown %%
 
             # Don't load old suggestion immediately

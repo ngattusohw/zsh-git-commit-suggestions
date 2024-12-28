@@ -1,5 +1,9 @@
 ## ToDo
 
+## Known Issues
+
+- Job control messages (process IDs) are displayed when running background suggestion generation
+
 ### Configuration Management
 
 - [x] Implement persistent configuration storage (~/.git-suggest-config)
