@@ -189,6 +189,44 @@ _post_git_command() {
         _update_staged_diff
         _debug_log "After update - Diff cached: ${_CACHED_STAGED_DIFF:+yes}"
 
+        # If we have staged changes, start generating a suggestion in the background
+        if [[ -n "$_CACHED_STAGED_DIFF" ]]; then
+            _debug_log "Starting background suggestion generation after git add"
+
+            # Clear existing suggestion when starting new generation
+            typeset -g _COMMIT_SUGGESTION=""
+            _set_suggestion_state "LOADING"
+
+            # Create temporary files
+            local tmp_file="/tmp/git-suggestion-${$}"
+            local state_file="/tmp/git-suggestion-state-${$}"
+            echo "$_CACHED_STAGED_DIFF" > "$tmp_file"
+
+            # Run in background with proper job control handling
+            {
+                # Redirect all output to prevent job control messages
+                exec 1>/dev/null 2>&1
+
+                source "${0:A}"
+                _load_config  # Ensure configuration is loaded in background process
+                suggestion=$(_generate_commit_suggestions < "$tmp_file")
+                if [[ -n "$suggestion" ]]; then
+                    # Remove the "Suggested commit message:" prefix before storing
+                    suggestion=${suggestion#"Suggested commit message:"}
+                    suggestion=${suggestion#$'\n'}  # Remove leading newline if present
+                    echo "$suggestion" > "$state_file"
+                fi
+                rm -f "$tmp_file"
+            } &
+
+            # Immediately disown the job
+            disown %%
+
+            # Don't load old suggestion immediately
+            # Let the background process complete and update the state
+            _debug_log "Background generation process started"
+        fi
+
         # Clear the last command
         typeset -g _LAST_GIT_COMMAND=""
     fi
@@ -281,13 +319,18 @@ _git_commit_quote_handler() {
             _debug_log "Temporarily bound Tab to accept-suggestion for git commit"
         fi
 
-        _debug_log "State before generating suggestion: $_SUGGESTION_STATE"
+        # If we don't have a suggestion yet, generate one
+        if [[ "$_SUGGESTION_STATE" != "READY" ]]; then
+            _debug_log "No suggestion ready, generating one now"
+            _set_suggestion_state "LOADING"
+            _show_suggestion
 
-        # Run in current shell to preserve state
-        _generate_commit_suggestions > >(read -r suggestion; typeset -g _COMMIT_SUGGESTION="$suggestion")
-
-        _debug_log "State after generating suggestion: $_SUGGESTION_STATE"
-        _show_suggestion "$_COMMIT_SUGGESTION"
+            # Generate the suggestion
+            _generate_commit_suggestions
+        else
+            _debug_log "Suggestion already available"
+            _show_suggestion
+        fi
 
         # Force display update
         zle reset-prompt
