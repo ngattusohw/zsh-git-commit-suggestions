@@ -141,10 +141,6 @@ _generate_commit_suggestions() {
         return 1
     fi
 
-    # Store suggestion in global variable
-    typeset -g _COMMIT_SUGGESTION="$suggestion"
-    _debug_log "Stored suggestion in global variable: $_COMMIT_SUGGESTION"
-
     # Only set READY state after successful generation
     _set_suggestion_state "READY"
     _debug_log "Successfully generated suggestion"
@@ -194,12 +190,15 @@ _post_git_command() {
             _debug_log "Starting background suggestion generation after git add"
 
             # Clear existing suggestion when starting new generation
+            # TODO: We might not have to do this since global vars are not a thing
             typeset -g _COMMIT_SUGGESTION=""
             _set_suggestion_state "LOADING"
 
+            local parent_pid=$$
+            _debug_log "Parent PID: $parent_pid"
             # Create temporary files
-            local tmp_file="/tmp/git-suggestion-${$}"
-            local state_file="/tmp/git-suggestion-state-${$}"
+            local tmp_file="/tmp/git-suggestion-${parent_pid}"
+            local state_file="/tmp/git-suggestion-state-${parent_pid}"
             echo "$_CACHED_STAGED_DIFF" > "$tmp_file"
 
             # Run in background with proper job control handling and output redirection
@@ -210,9 +209,11 @@ _post_git_command() {
                 _load_config
                 suggestion=$(_generate_commit_suggestions < "$tmp_file")
                 if [[ -n "$suggestion" ]]; then
-                    suggestion=${suggestion#"Suggested commit message:"}
-                    suggestion=${suggestion#$'\n'}
+                    _debug_log "We have a suggestion from the background process: $suggestion"
+                    # suggestion=${suggestion#"Suggested commit message:"}
+                    # suggestion=${suggestion#$'\n'}
                     echo "$suggestion" > "$state_file"
+                    echo "READY" > "$suggestion_state_file"  # Persist the state
                 fi
                 rm -f "$tmp_file"
             } 2>/dev/null &
@@ -316,18 +317,49 @@ _git_commit_quote_handler() {
             _debug_log "Temporarily bound Tab to accept-suggestion for git commit"
         fi
 
-        # If we don't have a suggestion yet, generate one
-        if [[ "$_SUGGESTION_STATE" != "READY" ]]; then
-            _debug_log "No suggestion ready, generating one now"
-            _set_suggestion_state "LOADING"
-            _show_suggestion
 
-            # Generate the suggestion
-            _generate_commit_suggestions
+        if [[ -f "/tmp/git-suggestion-state-${$}" ]]; then
+            # _set_suggestion_state "READY"
+            _debug_log "Existing suggestion"
+            _debug_log "Commit suggestion from file: $(cat /tmp/git-suggestion-state-${$})"
+            _debug_log "State: $_SUGGESTION_STATE"
+            _debug_log "Suggestion: $_COMMIT_SUGGESTION"
+            _COMMIT_SUGGESTION=$(cat /tmp/git-suggestion-state-${$})
+            _set_suggestion_state "READY"
+            _debug_log "Removing state file"
+            rm -f "/tmp/git-suggestion-state-${$}"
+        fi
+
+         # Use existing suggestion if available
+        if [[ "$_SUGGESTION_STATE" == "READY" && -n "$_COMMIT_SUGGESTION" ]]; then
+            _debug_log "Using existing suggestion"
+            _show_suggestion
         else
-            _debug_log "Suggestion already available"
+            _debug_log "No cached suggestion available"
             _show_suggestion
         fi
+
+
+        # # Get and show suggestion
+        # _COMMIT_SUGGESTION=$(_generate_commit_suggestions)
+        # _show_suggestion "$_COMMIT_SUGGESTION"
+
+
+        # Run in current shell to preserve state
+        # _generate_commit_suggestions > >(read -r suggestion; typeset -g _COMMIT_SUGGESTION="$suggestion")
+
+        # # If we don't have a suggestion yet, generate one
+        # if [[ "$_SUGGESTION_STATE" != "READY" ]]; then
+        #     _debug_log "No suggestion ready, generating one now"
+        #     _set_suggestion_state "LOADING"
+        #     _show_suggestion
+
+        #     # Generate the suggestion
+        #     _generate_commit_suggestions
+        # else
+        #     _debug_log "Suggestion already available"
+        #     _show_suggestion
+        # fi
 
         # Force display update
         zle reset-prompt
@@ -576,7 +608,7 @@ _openai_generate() {
     "messages": [
         {
             "role": "system",
-            "content": "You are a helpful assistant that generates concise, conventional commit messages based on git diffs."
+            "content": "You are a helpful assistant that generates concise, conventional commit messages based on git diffs. Try to be as concise as possible. Additionally, instead of just describing the changes in each file, try to infer the purpose of the changes and describe it in a single sentence if possible. For large diffs, you can use more than one sentence."
         },
         {
             "role": "user",
