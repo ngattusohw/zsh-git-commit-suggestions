@@ -608,7 +608,7 @@ _openai_generate() {
     "messages": [
         {
             "role": "system",
-            "content": "You are a helpful assistant that generates concise, conventional commit messages based on git diffs. Try to be as concise as possible. Additionally, instead of just describing the changes in each file, try to infer the purpose of the changes and describe it in a single sentence if possible. For large diffs, you can use more than one sentence."
+            "content": "You are a helpful assistant that generates concise, conventional commit messages based on git diffs. Try to be as concise as possible. Additionally, instead of just describing the changes in each file, try to infer the purpose of the changes and describe it in a single sentence if possible. For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small."
         },
         {
             "role": "user",
