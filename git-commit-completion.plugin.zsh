@@ -657,6 +657,10 @@ EOF
         return 1
     fi
 
+    #Added comments for demo
+
+    #Hi my name is jake
+
     # Extract message using more reliable pattern
     local message
     message=$(echo "$response" | grep -o '"content": *"[^"]*"' | cut -d'"' -f4)
