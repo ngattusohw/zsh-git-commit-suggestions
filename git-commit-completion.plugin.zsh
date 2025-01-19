@@ -600,6 +600,7 @@ _openai_generate() {
     # Create temporary file for JSON request
     local tmp_json
     tmp_json=$(mktemp)
+    #test
 
     # Write JSON to temp file
     cat > "$tmp_json" << EOF
@@ -614,7 +615,9 @@ _openai_generate() {
                 try to infer the purpose of the changes and describe it in a single sentence if possible across multiple files.
                 For example, if we add a new api route, in the backend, and a new page in the front end with somewhat matching
                 naming, you can infer that the changes are related to a single full stack feature, and say something like added new settings page to configure token saving, for example.
-                For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small."
+                For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small.
+                AT ALL COSTS, AVOID USING SPECIAL QUOTE CHARACTERS SUCH AS `, as this will break the json parser.
+                "
         },
         {
             "role": "user",
