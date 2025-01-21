@@ -197,8 +197,9 @@ _post_git_command() {
             local parent_pid=$$
             _debug_log "Parent PID: $parent_pid"
             # Create temporary files
-            local tmp_file="/tmp/git-suggestion-${parent_pid}"
-            local state_file="/tmp/git-suggestion-state-${parent_pid}"
+            local tmp_file="/tmp/git-suggestion-temp-diff-${parent_pid}"
+            local suggestion_state_file="/tmp/git-suggestion-state-${parent_pid}"
+            local suggestion_file="/tmp/git-suggestion-${parent_pid}"
             echo "$_CACHED_STAGED_DIFF" > "$tmp_file"
 
             # Run in background with proper job control handling and output redirection
@@ -212,7 +213,7 @@ _post_git_command() {
                     _debug_log "We have a suggestion from the background process: $suggestion"
                     # suggestion=${suggestion#"Suggested commit message:"}
                     # suggestion=${suggestion#$'\n'}
-                    echo "$suggestion" > "$state_file"
+                    echo "$suggestion" > "$suggestion_file"
                     echo "READY" > "$suggestion_state_file"  # Persist the state
                 fi
                 rm -f "$tmp_file"
@@ -254,6 +255,8 @@ _show_suggestion() {
         "READY")
             if [[ -n "$_COMMIT_SUGGESTION" ]]; then
                 print -P "%F{green}Suggested commit message:%f\n$_COMMIT_SUGGESTION"
+                rm -f "/tmp/git-suggestion-state-${$}"
+                rm -f "/tmp/git-suggestion-${$}"
             else
                 print -P "%F{yellow}No suggestion available%f"
             fi
@@ -318,16 +321,16 @@ _git_commit_quote_handler() {
         fi
 
 
-        if [[ -f "/tmp/git-suggestion-state-${$}" ]]; then
+        if [[ -f "/tmp/git-suggestion-${$}" ]]; then
             # _set_suggestion_state "READY"
             _debug_log "Existing suggestion"
-            _debug_log "Commit suggestion from file: $(cat /tmp/git-suggestion-state-${$})"
+            _debug_log "Commit suggestion from file: $(cat /tmp/git-suggestion-${$})"
             _debug_log "State: $_SUGGESTION_STATE"
             _debug_log "Suggestion: $_COMMIT_SUGGESTION"
-            _COMMIT_SUGGESTION=$(cat /tmp/git-suggestion-state-${$})
+            _COMMIT_SUGGESTION=$(cat /tmp/git-suggestion-${$})
             _set_suggestion_state "READY"
-            _debug_log "Removing state file"
-            rm -f "/tmp/git-suggestion-state-${$}"
+            _debug_log "Removing suggestion file"
+
         fi
 
          # Use existing suggestion if available
@@ -616,7 +619,7 @@ _openai_generate() {
                 For example, if we add a new api route, in the backend, and a new page in the front end with somewhat matching
                 naming, you can infer that the changes are related to a single full stack feature, and say something like added new settings page to configure token saving, for example.
                 For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small.
-                AT ALL COSTS, AVOID USING SPECIAL QUOTE CHARACTERS SUCH AS `, as this will break the json parser.
+                AT ALL COSTS, AVOID USING SPECIAL QUOTE CHARACTERS SUCH AS \`, as this will break the json parser.
                 "
         },
         {
