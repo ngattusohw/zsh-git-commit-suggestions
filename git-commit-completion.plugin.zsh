@@ -278,14 +278,16 @@ _format_complete_message() {
 
 # Add at the top with other global variables
 typeset -g _ORIGINAL_TAB_BINDING=""
+typeset -g _ORIGINAL_CTRL_F_BINDING=""
 typeset -g _TAB_BINDING_CHANGED=0
 
 # Function to restore binding
 _restore_tab_binding() {
     if [[ $_TAB_BINDING_CHANGED -eq 1 ]]; then
         bindkey '^I' complete-word
+        bindkey '^F' "$_ORIGINAL_CTRL_F_BINDING"  # Restore Ctrl-F
         _TAB_BINDING_CHANGED=0
-        _debug_log "Restored original Tab binding"
+        _debug_log "Restored original Tab and Ctrl-F bindings"
     fi
 }
 
@@ -315,11 +317,12 @@ _git_commit_quote_handler() {
 
         if [[ $_TAB_BINDING_CHANGED -eq 0 ]]; then
             _ORIGINAL_TAB_BINDING=$(bindkey '^I')
+            _ORIGINAL_CTRL_F_BINDING=$(bindkey '^F')  # Save original Ctrl-F binding
             bindkey '^I' accept-suggestion
+            bindkey '^F' show-suggestion  # Bind Ctrl-F to show suggestion
             _TAB_BINDING_CHANGED=1
-            _debug_log "Temporarily bound Tab to accept-suggestion for git commit"
+            _debug_log "Temporarily bound Tab and Ctrl-F for git commit"
         fi
-
 
         if [[ -f "/tmp/git-suggestion-${$}" ]]; then
             # _set_suggestion_state "READY"
@@ -341,28 +344,6 @@ _git_commit_quote_handler() {
             _debug_log "No cached suggestion available"
             _show_suggestion
         fi
-
-
-        # # Get and show suggestion
-        # _COMMIT_SUGGESTION=$(_generate_commit_suggestions)
-        # _show_suggestion "$_COMMIT_SUGGESTION"
-
-
-        # Run in current shell to preserve state
-        # _generate_commit_suggestions > >(read -r suggestion; typeset -g _COMMIT_SUGGESTION="$suggestion")
-
-        # # If we don't have a suggestion yet, generate one
-        # if [[ "$_SUGGESTION_STATE" != "READY" ]]; then
-        #     _debug_log "No suggestion ready, generating one now"
-        #     _set_suggestion_state "LOADING"
-        #     _show_suggestion
-
-        #     # Generate the suggestion
-        #     _generate_commit_suggestions
-        # else
-        #     _debug_log "Suggestion already available"
-        #     _show_suggestion
-        # fi
 
         # Force display update
         zle reset-prompt
@@ -389,11 +370,13 @@ _accept_suggestion() {
 # Create and bind the widgets
 zle -N self-insert-quote _git_commit_quote_handler
 zle -N accept-suggestion _accept_suggestion
+zle -N show-suggestion _show_suggestion
 
 # Bind keys
 bindkey '"' self-insert-quote
 bindkey '^I' accept-suggestion     # Tab key
 bindkey '^[[C' accept-suggestion   # Right arrow
+bindkey '^F' show-suggestion       # Ctrl-F
 
 _debug_log "Git commit suggestion system loaded at $(date)"
 
