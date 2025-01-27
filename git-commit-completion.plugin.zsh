@@ -619,6 +619,7 @@ _openai_generate() {
                 For example, if we add a new api route, in the backend, and a new page in the front end with somewhat matching
                 naming, you can infer that the changes are related to a single full stack feature, and say something like added new settings page to configure token saving, for example.
                 For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small.
+                Use a semantic commit prefix. and add a cool emoji if applicable.
                 AT ALL COSTS, AVOID USING SPECIAL QUOTE CHARACTERS SUCH AS \`, as this will break the json parser.
                 "
         },
