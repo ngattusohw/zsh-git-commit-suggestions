@@ -816,8 +816,141 @@ _anthropic_generate() {
     local diff="$1"
     _debug_log "Generating suggestion using Anthropic"
 
-    # Will implement the actual Anthropic call here
-    return 1
+    # Ensure we have required variables
+    if [[ -z "$SUGGEST_LLM_TOKEN" ]]; then
+        _debug_log "Anthropic token not found"
+        return 1
+    fi
+
+    # Test with minimal request first
+    local test_request='{"model":"claude-3-haiku-20240307","max_tokens":10,"messages":[{"role":"user","content":"test"}]}'
+
+    local test_response
+    test_response=$(curl -s -S -H "Content-Type: application/json" \
+                        -H "x-api-key: $SUGGEST_LLM_TOKEN" \
+                        -H "anthropic-version: 2023-06-01" \
+                        -d "$test_request" \
+                        "https://api.anthropic.com/v1/messages" 2>&1)
+
+    _debug_log "Test response: $test_response"
+
+    if [[ "$test_response" == *"error"* ]]; then
+        _debug_log "Test request failed"
+        return 1
+    fi
+
+    # If test passed, proceed with real request
+    # Create a clean version of the diff for JSON
+    local escaped_diff
+    escaped_diff=$(echo "$diff" | LC_ALL=C sed '
+        s/[^[:print:]\n]//g
+        s/\\/\\\\/g
+        s/"/\\"/g
+        s/$/\\n/g
+    ' | tr -d '\r')
+
+    # Debug the escaped content
+    _debug_log "First line of escaped diff: $(echo "$escaped_diff" | head -n1)"
+
+    # Create temporary file for JSON request
+    local tmp_json
+    tmp_json=$(mktemp)
+
+    # Write JSON to temp file - Anthropic format
+    cat > "$tmp_json" << EOF
+{
+    "model": "claude-3-haiku-20240307",
+    "max_tokens": 200,
+    "messages": [
+        {
+            "role": "user",
+            "content": "You are a helpful assistant that generates concise, conventional commit messages based on git diffs. Try to be as concise as possible, but don't sacrifice clarity. Additionally, instead of just describing the changes in each file, try to infer the purpose of the changes and describe it in a single sentence if possible across multiple files. For example, if we add a new api route, in the backend, and a new page in the front end with somewhat matching naming, you can infer that the changes are related to a single full stack feature, and say something like added new settings page to configure token saving, for example. For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small. Use a semantic commit prefix. and add a cool emoji if applicable. AT ALL COSTS, AVOID USING SPECIAL QUOTE CHARACTERS SUCH AS backticks, as this will break the json parser.\n\nGenerate a commit message for this diff:\n\n${escaped_diff}"
+        }
+    ]
+}
+EOF
+
+    _debug_log "Request JSON file created: $tmp_json"
+    _debug_log "First 100 chars of request: $(head -c 100 "$tmp_json")"
+
+    # Make the API call using the file
+    local response
+    local http_response
+    http_response=$(curl -s -S -i -H "Content-Type: application/json" \
+                        -H "x-api-key: $SUGGEST_LLM_TOKEN" \
+                        -H "anthropic-version: 2023-06-01" \
+                        -d "@$tmp_json" \
+                        "https://api.anthropic.com/v1/messages" 2>&1)
+
+    # Clean up temp file
+    rm -f "$tmp_json"
+
+    local result=$?
+    local http_code=$(echo "$http_response" | grep -i "^HTTP" | tail -n1 | awk '{print $2}')
+    response=$(echo "$http_response" | awk 'BEGIN{RS="\r\n\r\n"} NR==2')
+
+    _debug_log "Anthropic API call result: $result"
+    _debug_log "HTTP Status: $http_code"
+    _debug_log "Response: $response"
+
+    if [[ $result -ne 0 || $http_code -ne 200 ]]; then
+        # Try to extract error message from response
+        local error_message
+        error_message=$(echo "$response" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
+        if [[ -n "$error_message" ]]; then
+            _debug_log "Anthropic API error: $error_message"
+        fi
+        _debug_log "Anthropic API call failed"
+        return 1
+    fi
+
+    # Extract message from Anthropic response format
+    local message
+    # Anthropic response format: {"content":[{"type":"text","text":"MESSAGE"}]}
+
+    _debug_log "Raw response length: ${#response}"
+    _debug_log "Response starts with: $(echo "$response" | head -c 100)"
+    _debug_log "Response ends with: $(echo "$response" | tail -c 50)"
+
+    # Remove any non-printable characters that might cause issues
+    local clean_response=$(echo "$response" | tr -cd '[:print:]\n')
+    _debug_log "Cleaned response length: ${#clean_response}"
+
+    # Try manual parsing first (more reliable for our use case)
+    message=$(echo "$clean_response" | sed 's/.*"text":"//; s/"}].*//')
+    _debug_log "Manual extraction result: '$message'"
+
+    # If manual parsing failed and jq is available, try jq as fallback
+    if [[ -z "$message" && -n "$(command -v jq)" ]]; then
+        _debug_log "Manual parsing failed, trying jq"
+        message=$(echo "$clean_response" | jq -r '.content[0].text' 2>/dev/null)
+        _debug_log "jq extraction result: '$message'"
+    fi
+
+    # Handle escaped newlines and convert emojis
+    if [[ -n "$message" ]]; then
+        message=$(echo "$message" | sed 's/\\n/\n/g')
+        message=$(echo "$message" | sed 's/:sparkles:/✨/g; s/:rocket:/🚀/g; s/:bug:/🐛/g; s/:wrench:/🔧/g; s/:zap:/⚡/g')
+        _debug_log "Final processed message: '$message'"
+    else
+        _debug_log "All extraction methods failed - empty result"
+    fi
+
+    if [[ -z "$message" ]]; then
+        _debug_log "Failed to extract message from response"
+        _debug_log "Response was: $response"
+        return 1
+    fi
+
+    if [[ "$message" == "ERROR: NO_CHANGES" ]]; then
+        _debug_log "LLM reported no changes"
+        return 1
+    fi
+
+    _debug_log "Successfully extracted message: $message"
+    typeset -g _COMMIT_SUGGESTION="$message"  # Store in global variable
+    echo "$message"
+    return 0
 }
 
 # Local LLM Provider Implementation
