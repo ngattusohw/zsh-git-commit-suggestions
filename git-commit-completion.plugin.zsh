@@ -247,7 +247,7 @@ _show_suggestion() {
             print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
             ;;
         "LOADING")
-            print -P "%F{blue}⟳ Generating commit suggestion...%f"
+            print -P "%F{blue}⟳ Generating commit suggestion... (Press Tab to check if ready)%f"
             ;;
         "ERROR")
             print -P "%F{red}✖ Error generating suggestion: $_SUGGESTION_ERROR%f"
@@ -374,7 +374,19 @@ add-zsh-hook preexec _restore_tab_binding
 
 # Accept suggestion function
 _accept_suggestion() {
-    if [[ -n "$_COMMIT_SUGGESTION" ]]; then
+    # Check for completed background job if in LOADING state
+    if [[ "$_SUGGESTION_STATE" == "LOADING" ]]; then
+        local suggestion_file="/tmp/git-suggestion-${$}"
+        local state_file="/tmp/git-suggestion-state-${$}"
+        if [[ -f "$suggestion_file" && -f "$state_file" && $(cat "$state_file") == "READY" ]]; then
+            _COMMIT_SUGGESTION=$(cat "$suggestion_file")
+            _set_suggestion_state "READY"
+            rm -f "$suggestion_file" "$state_file"
+            _debug_log "Loaded completed suggestion from background job"
+        fi
+    fi
+
+    if [[ -n "$_COMMIT_SUGGESTION" && "$_SUGGESTION_STATE" == "READY" ]]; then
         # Get the complete formatted message
         local formatted_message
         formatted_message=$(_format_complete_message)
@@ -382,6 +394,9 @@ _accept_suggestion() {
         # Update buffer with full message
         BUFFER="${BUFFER}${formatted_message}"
         CURSOR=${#BUFFER}
+        zle reset-prompt
+    elif [[ "$_SUGGESTION_STATE" == "LOADING" ]]; then
+        print -P "%F{blue}⟳ Still generating... Press Tab again to check.%f"
         zle reset-prompt
     fi
 }
