@@ -1,148 +1,264 @@
-# zsh-git-commit-suggestions
+# 🚀 Git Commit Message Suggestions for Zsh
 
-This is a work in progress repo
+An intelligent zsh plugin that generates concise, conventional commit messages based on your staged changes using AI providers like OpenAI or Anthropic.
 
-## Goal
+## ✨ Features
 
-Allow for inline suggestions for git commit messages for git cli users, generated based on the diff from the staged files
+- 🤖 **AI-Powered Suggestions**: Generates conventional commit messages using OpenAI or Anthropic
+- ⚡ **Instant Tab Completion**: Press `Tab` to insert suggestions while typing `git commit -m "`
+- 🔄 **Background Processing**: Non-blocking suggestion generation with loading states
+- 🎯 **Concise Messages**: Generates single-line commits under 72 characters
+- 🛡️ **Error Handling**: Graceful error states with helpful guidance
+- 🔧 **Easy Configuration**: Simple setup wizard with `git-suggest-config`
+- 🌍 **Environment Support**: Works with both config files and environment variables
 
-## Todo
+## 📦 Installation
 
-Detect git add commands
-Query diff against configured llm and store result for quick viewing experience for user
-configurable llm choice, either local or remote
-set up docs
+### Oh My Zsh
 
-## How to update the zsh plugin
+1. **Clone the repository:**
 
-`vim $ZSH_CUSTOM/plugins/git-commit-completion/git-commit-completion.plugin.zsh`
+   ```bash
+   git clone https://github.com/yourusername/zsh-git-commit-suggestions \
+     $ZSH_CUSTOM/plugins/git-commit-completion
+   ```
 
-To view the debug logs run `cat /tmp/git-completion-debug.log`
+2. **Add to your plugins in `~/.zshrc`:**
 
-after making changes, run `source ~/.zshrc` to reload the plugin
+   ```bash
+   plugins=(... git-commit-completion)
+   ```
 
-after every run, delete the debug log file `rm /tmp/git-completion-debug.log  # Clear old logs`
+3. **Reload your shell:**
+   ```bash
+   source ~/.zshrc
+   ```
 
-### Discussion around delay based approach for detecting git add commands
+### Manual Installation
 
-#### Why this approach?
+1. **Clone and source the plugin:**
+   ```bash
+   git clone https://github.com/yourusername/zsh-git-commit-suggestions
+   echo "source /path/to/git-commit-completion.plugin.zsh" >> ~/.zshrc
+   source ~/.zshrc
+   ```
 
-1. **Simplicity**: No external dependencies required
-2. **Cross-platform**: Works consistently across different systems
-3. **Non-blocking**: Running in background prevents shell freezing
-4. **User Experience**: 0.1s delay is imperceptible to users
+## ⚙️ Setup
 
-#### Potential Side Effects
+### Quick Start
 
-- Very rare cases where diff might be missed if git takes longer than 0.1s to update index
-- Small memory overhead from background processes
-- Theoretical race conditions in high-frequency staging operations
+1. **Configure your AI provider:**
 
-#### Alternative Approaches Considered
+   ```bash
+   git-suggest-config
+   ```
 
-1. **Git Post-Index-Change Hook**
+2. **Choose your provider:**
 
-   - Would be ideal but not provided natively by Git
-   - Would require Git configuration changes
+   - **OpenAI API** (GPT-3.5-turbo)
+   - **Anthropic API** (Claude-3-haiku)
+   - **Local LLM** (coming soon)
 
-2. **File System Watcher**
+3. **Stage some changes and commit:**
+   ```bash
+   git add .
+   git commit -m "
+   # Press Tab to insert AI-generated suggestion!
+   ```
 
-   - More robust solution using `inotifywait`
-   - Requires additional system dependencies
-   - Platform-specific implementation needed
+### Configuration Options
 
-3. **Git Status Polling**
-   - Could actively check git status until changes detected
-   - More resource intensive
-   - Potential for blocking shell operations
+#### Option 1: Interactive Setup
 
-#### Future Improvements
+```bash
+git-suggest-config
+```
 
-If the current approach proves problematic, we could implement a more robust solution using a combination of:
+#### Option 2: Environment Variables
 
-- Multiple retry attempts
-- File system watchers where available
-- Configurable delay times
+```bash
+export SUGGEST_PROVIDER="anthropic"  # or "openai"
+export SUGGEST_LLM_TOKEN="your-api-token"
+```
 
-For now, the delay-based approach provides the best balance of reliability and simplicity.
+#### Option 3: Config File
 
-## Implementation Details
+The plugin creates `~/.git-suggest-config` with your settings.
 
-### Git Staging Detection
+## 🎮 Usage
 
-...
+### Basic Workflow
 
-### Suggestion State Management
+1. **Make your changes:**
 
-The plugin uses a state-based system to handle different stages of commit message generation and display appropriate feedback to users.
+   ```bash
+   # Edit files
+   vim src/components/Button.tsx
+   ```
 
-#### States
+2. **Stage changes:**
 
-- **UNCONFIGURED**: No LLM configuration detected
+   ```bash
+   git add .
+   # Plugin automatically analyzes diff in background
+   ```
 
-  - Displays: `⚠ LLM not configured. Run git-suggest-config to set up.`
-  - Occurs when neither API token nor local LLM path is set
+3. **Start commit:**
+   ```bash
+   git commit -m "
+   # Suggestion appears automatically!
+   # Press Tab to insert: "feat: ✨ add responsive button component"
+   ```
 
-- **LOADING**: Generating suggestion
+### Loading States
 
-  - Displays: `⟳ Generating commit suggestion...`
-  - Shows when waiting for LLM response
+The plugin shows helpful status indicators:
 
-- **ERROR**: Something went wrong
+- 🔵 **Loading**: `⟳ Generating commit suggestion... (Press Tab to check if ready)`
+- 🟢 **Ready**: `Suggested commit message: feat: ✨ add new feature`
+- 🟡 **Unconfigured**: `⚠ LLM not configured. Run git-suggest-config to set up.`
+- 🔴 **Error**: `✖ Error generating suggestion: No staged changes detected`
 
-  - Displays: `✖ Error generating suggestion: [error message]`
-  - Common cases: no staged changes, LLM API errors
+### Tab Retry Feature
 
-- **READY**: Suggestion available
-  - Displays: The formatted commit message suggestion
-  - Normal operation state
+If a suggestion is still loading, press `Tab` multiple times to retry:
 
-#### User Experience
+- First Tab: Shows loading message
+- Subsequent Tabs: Checks if suggestion is ready and inserts it
 
-Users will see different colored indicators based on the state:
+## 🤖 AI Providers
 
-- Yellow (⚠) for configuration warnings
-- Blue (⟳) for loading states
-- Red (✖) for errors
-- Normal text for suggestions
+### OpenAI (GPT-3.5-turbo)
 
-#### Configuration
+- **Setup**: Get API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+- **Cost**: Pay-per-use (~$0.001 per commit message)
+- **Speed**: ~2-3 seconds
 
-Users can configure their LLM preference using `git-suggest-config`:
+### Anthropic (Claude-3-haiku)
 
-1. OpenAI API
-2. Anthropic API
-3. Local LLM
+- **Setup**: Get API key from [Anthropic Console](https://console.anthropic.com/)
+- **Cost**: Pay-per-use (~$0.0001 per commit message)
+- **Speed**: ~1-2 seconds
+- **Recommended**: Faster and cheaper than OpenAI
 
-The configuration command will guide users through setting up their preferred option.
+## 🎯 Example Suggestions
 
-#### State Flow
+The plugin generates concise, conventional commit messages:
 
-1. Plugin checks for configuration on load
-2. When files are staged, diff is cached
-3. On `git commit -m "`, plugin:
-   - Verifies configuration
-   - Checks for staged changes
-   - Generates suggestion if all prerequisites met
-   - Shows appropriate state message to user
+```bash
+# Before (manual):
+git commit -m "updated the user authentication system and fixed some bugs"
 
-### Configuration Management
+# After (AI-generated):
+git commit -m "feat: ✨ improve user authentication with password validation"
+git commit -m "fix: 🐛 resolve login timeout issue"
+git commit -m "chore: 🔧 update dependencies to latest versions"
+```
 
-The plugin stores configuration in `~/.git-suggest-config`. This file contains:
+## 🔧 Configuration Commands
 
-- LLM provider selection (OpenAI, Anthropic, or Local)
-- API tokens or model paths
-- Additional configuration options
+### View Current Config
 
-#### Configuration Commands
+```bash
+git-suggest-config
+# Shows both file-based and environment configuration
+```
 
-- `git-suggest-config`: Interactive configuration menu
-  - Set up LLM providers
-  - View current configuration
-  - Clear existing configuration
+### Change Provider
 
-#### Security
+```bash
+git-suggest-config
+# Select option 1 (OpenAI) or 2 (Anthropic)
+```
 
-- Configuration file permissions are set to 600 (user read/write only)
-- API tokens are stored locally
-- No remote transmission of tokens except to chosen LLM provider
+### Clear Configuration
+
+```bash
+git-suggest-config
+# Select option 5 to clear all settings
+```
+
+## 🐛 Troubleshooting
+
+### Debug Logging
+
+View detailed logs for troubleshooting:
+
+```bash
+cat /tmp/git-completion-debug.log
+```
+
+### Clear Debug Logs
+
+```bash
+rm /tmp/git-completion-debug.log
+```
+
+### Common Issues
+
+**No suggestions appearing:**
+
+- Check if files are staged: `git status`
+- Verify configuration: `git-suggest-config`
+- Check debug logs for errors
+
+**Suggestion stuck loading:**
+
+- Press `Tab` multiple times to retry
+- Check your internet connection
+- Verify API token is valid
+
+**Permission denied errors:**
+
+- Ensure `/tmp` is writable
+- Check config file permissions: `ls -la ~/.git-suggest-config`
+
+## 🛠️ Development
+
+### Plugin Structure
+
+```
+git-commit-completion.plugin.zsh    # Main plugin file
+├── Hooks (preexec, precmd)         # Git command detection
+├── State Management                # Loading, Ready, Error states
+├── LLM Providers                   # OpenAI, Anthropic integrations
+├── Background Processing           # Non-blocking generation
+└── Configuration                   # Setup and management
+```
+
+### Testing Changes
+
+```bash
+# Edit the plugin
+vim $ZSH_CUSTOM/plugins/git-commit-completion/git-commit-completion.plugin.zsh
+
+# Reload
+source ~/.zshrc
+
+# Test with debug logging
+rm /tmp/git-completion-debug.log
+git add . && git commit -m "
+cat /tmp/git-completion-debug.log
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests and documentation
+5. Submit a pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## 🎉 Acknowledgments
+
+- Inspired by GitHub Copilot for terminal workflows
+- Built with zsh hooks and widget system
+- Powered by OpenAI and Anthropic APIs
+
+---
+
+**Made with ❤️ by ng3**
