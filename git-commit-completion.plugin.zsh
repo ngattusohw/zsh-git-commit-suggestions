@@ -498,126 +498,441 @@ EOF
     _debug_log "Configuration saved to $_CONFIG_FILE"
 }
 
-# Update the configuration function
+# Enhanced configuration function with improved onboarding
 _git_suggest_config() {
     # Restore PATH at the start of the function
     PATH="$_ORIGINAL_PATH"
 
-    echo "Git Commit Suggestions Configuration"
-    echo "-----------------------------------"
-    echo "1. OpenAI API"
-    echo "2. Anthropic API"
-    echo "3. Local LLM"
-    echo "4. View current configuration"
-    echo "5. Clear configuration"
+    # Cool ASCII pixel art header
+    echo ""
+    echo "    ╔═══════════════════════════════════════════════════════════╗"
+    echo "    ║                                                           ║"
+    echo "    ║   ████████   █████████  ████████                         ║"
+    echo "    ║   ██         ██     ██     ██                            ║"
+    echo "    ║   ██  ████   █████████     ██                            ║"
+    echo "    ║   ██    ██   ██     ██     ██                            ║"
+    echo "    ║   ████████   ██     ██     ██                            ║"
+    echo "    ║                                                           ║"
+    echo "    ║           🤖 Git AI Tool - Smart Commit Messages          ║"
+    echo "    ║                                                           ║"
+    echo "    ╚═══════════════════════════════════════════════════════════╝"
+    echo ""
+
+    # Check if this is first-time setup
+    local is_first_time=false
+    local has_config=false
+    if [[ ! -f "$_CONFIG_FILE" && -z "$SUGGEST_PROVIDER" && -z "$SUGGEST_LLM_TOKEN" ]]; then
+        is_first_time=true
+    else
+        has_config=true
+    fi
+
+    # Welcome message for first-time users
+    if $is_first_time; then
+        echo "🚀 Welcome to Git Commit Suggestions!"
+        echo "====================================="
+        echo ""
+        echo "This plugin generates AI-powered commit messages based on your staged changes."
+        echo "Let's get you set up with an AI provider to start generating suggestions!"
+        echo ""
+    else
+        echo "🔧 Git Commit Suggestions Configuration"
+        echo "======================================="
+        echo ""
+    fi
+
+    # Show current configuration if it exists
+    if $has_config; then
+        echo "📋 Current Configuration:"
+        echo "========================"
+
+        # Determine current provider and status
+        local current_provider=""
+        local current_status=""
+        local token_preview=""
+
+        if [[ -n "$SUGGEST_PROVIDER" ]]; then
+            current_provider="$SUGGEST_PROVIDER"
+        elif [[ -f "$_CONFIG_FILE" ]]; then
+            # Load from config file
+            local temp_provider=$(grep "SUGGEST_PROVIDER=" "$_CONFIG_FILE" 2>/dev/null | cut -d'"' -f2)
+            [[ -n "$temp_provider" ]] && current_provider="$temp_provider"
+        fi
+
+        if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+            token_preview="${SUGGEST_LLM_TOKEN:0:8}...${SUGGEST_LLM_TOKEN: -4}"
+            current_status="✅ Active"
+        elif [[ -f "$_CONFIG_FILE" ]]; then
+            local temp_token=$(grep "SUGGEST_LLM_TOKEN=" "$_CONFIG_FILE" 2>/dev/null | cut -d'"' -f2)
+            if [[ -n "$temp_token" ]]; then
+                token_preview="${temp_token:0:8}...${temp_token: -4}"
+                current_status="✅ Active"
+            fi
+        fi
+
+        if [[ -n "$current_provider" ]]; then
+            case "$current_provider" in
+                "openai")
+                    echo "  🤖 Provider: OpenAI API (GPT-3.5-turbo)"
+                    ;;
+                "anthropic")
+                    echo "  🧠 Provider: Anthropic API (Claude-3-haiku)"
+                    ;;
+                "local")
+                    echo "  🏠 Provider: Local LLM"
+                    ;;
+                *)
+                    echo "  ❓ Provider: $current_provider"
+                    ;;
+            esac
+
+            if [[ -n "$token_preview" ]]; then
+                echo "  🔑 Token: $token_preview"
+            fi
+            echo "  📊 Status: $current_status"
+        else
+            echo "  ⚠️  No valid configuration found"
+        fi
+        echo ""
+    fi
+
+    # Auto-detect existing API keys in environment
+    local detected_openai=""
+    local detected_anthropic=""
+    local has_detections=false
+
+    if [[ -n "$OPENAI_API_KEY" ]]; then
+        detected_openai="$OPENAI_API_KEY"
+        has_detections=true
+    fi
+
+    if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+        detected_anthropic="$ANTHROPIC_API_KEY"
+        has_detections=true
+    fi
+
+    # Show auto-detected keys
+    if $has_detections; then
+        echo "🔍 Auto-detected API keys in your environment:"
+        [[ -n "$detected_openai" ]] && echo "  ✅ OpenAI API key found (${detected_openai:0:8}...)"
+        [[ -n "$detected_anthropic" ]] && echo "  ✅ Anthropic API key found (${detected_anthropic:0:8}...)"
+        echo ""
+    fi
+
+    # Enhanced menu with recommendations and current config indicators
+    echo "Choose your AI provider:"
+    echo ""
+
+    # OpenAI option with current config indicator
+    echo -n "1. 🤖 OpenAI API (GPT-3.5-turbo)"
+    if [[ "$current_provider" == "openai" && "$current_status" == "✅ Active" ]]; then
+        echo " 🟢 CURRENTLY ACTIVE"
+    else
+        echo ""
+    fi
+    echo "   • Speed: ~2-3 seconds"
+    echo "   • Cost: ~\$0.001 per commit"
+    echo "   • Quality: Excellent"
+    [[ -n "$detected_openai" ]] && echo "   🔍 Auto-detected key available!"
+    echo ""
+
+    # Anthropic option with current config indicator
+    echo -n "2. 🧠 Anthropic API (Claude-3-haiku)"
+    if [[ "$current_provider" == "anthropic" && "$current_status" == "✅ Active" ]]; then
+        echo " 🟢 CURRENTLY ACTIVE"
+    else
+        echo " ⭐ RECOMMENDED"
+    fi
+    echo "   • Speed: ~1-2 seconds (fastest)"
+    echo "   • Cost: ~\$0.0001 per commit (cheapest)"
+    echo "   • Quality: Excellent + concise"
+    [[ -n "$detected_anthropic" ]] && echo "   🔍 Auto-detected key available!"
+    echo ""
+
+    # Local LLM option with current config indicator
+    echo -n "3. 🏠 Local LLM (coming soon)"
+    if [[ "$current_provider" == "local" && "$current_status" == "✅ Active" ]]; then
+        echo " 🟢 CURRENTLY ACTIVE"
+    else
+        echo ""
+    fi
+    echo "   • Speed: Variable"
+    echo "   • Cost: Free (after setup)"
+    echo "   • Quality: Depends on model"
+    echo ""
+    echo "4. 📋 View current configuration"
+    echo "5. 🗑️  Clear configuration"
+    echo ""
+    echo "─────────────────────────────────────────────────────────────────"
+    echo "☕ Enjoying this plugin? Buy the creator a coffee!"
+    echo "   💖 https://buymeacoffee.com/ngattusohw"
+    echo "   ⭐ Star the repo: https://github.com/ngattusohw/git-commit-suggestions"
+    echo "─────────────────────────────────────────────────────────────────"
+    echo ""
+
     read "choice?Select option (1-5): "
 
     case $choice in
         1)
-            read "token?Enter OpenAI API token: "
-            _save_config "openai" "$token"
+            echo ""
+            echo "🤖 Setting up OpenAI API..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            local token=""
+            if [[ -n "$detected_openai" ]]; then
+                echo "🔍 Found OpenAI API key in environment: ${detected_openai:0:8}..."
+                read "use_detected?Use this key? (y/n): "
+                if [[ "$use_detected" == "y" ]]; then
+                    token="$detected_openai"
+                    echo "✅ Using auto-detected OpenAI key"
+                fi
+            fi
+
+            if [[ -z "$token" ]]; then
+                echo ""
+                echo "📝 Get your API key from: https://platform.openai.com/api-keys"
+                echo "💡 Tip: Look for 'sk-' followed by a long string"
+                read "token?Enter OpenAI API token: "
+            fi
+
+            if [[ -n "$token" ]]; then
+                echo "🧪 Testing API key..."
+                if _test_openai_key "$token"; then
+                    _save_config "openai" "$token"
+                    echo "✅ OpenAI configured successfully!"
+                    _show_success_message "OpenAI"
+                else
+                    echo "❌ API key test failed. Please check your key and try again."
+                    return 1
+                fi
+            else
+                echo "❌ No API key provided."
+                return 1
+            fi
             ;;
         2)
-            read "token?Enter Anthropic API token: "
-            _save_config "anthropic" "$token"
+            echo ""
+            echo "🧠 Setting up Anthropic API..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            local token=""
+            if [[ -n "$detected_anthropic" ]]; then
+                echo "🔍 Found Anthropic API key in environment: ${detected_anthropic:0:8}..."
+                read "use_detected?Use this key? (y/n): "
+                if [[ "$use_detected" == "y" ]]; then
+                    token="$detected_anthropic"
+                    echo "✅ Using auto-detected Anthropic key"
+                fi
+            fi
+
+            if [[ -z "$token" ]]; then
+                echo ""
+                echo "📝 Get your API key from: https://console.anthropic.com/"
+                echo "💡 Tip: Look for 'sk-ant-' followed by a long string"
+                read "token?Enter Anthropic API token: "
+            fi
+
+            if [[ -n "$token" ]]; then
+                echo "🧪 Testing API key..."
+                if _test_anthropic_key "$token"; then
+                    _save_config "anthropic" "$token"
+                    echo "✅ Anthropic configured successfully!"
+                    _show_success_message "Anthropic"
+                else
+                    echo "❌ API key test failed. Please check your key and try again."
+                    return 1
+                fi
+            else
+                echo "❌ No API key provided."
+                return 1
+            fi
             ;;
         3)
-            read "path?Enter path to local LLM: "
+            echo ""
+            echo "🏠 Local LLM Setup"
+            echo "━━━━━━━━━━━━━━━━━━"
+            echo "🚧 Local LLM support is coming soon!"
+            echo "📧 For now, please use OpenAI or Anthropic API."
+            echo ""
+            read "path?Enter path to local LLM (experimental): "
             if [[ ! -f "$path" ]]; then
-                echo "Warning: File does not exist at $path"
+                echo "⚠️  Warning: File does not exist at $path"
                 read "continue?Continue anyway? (y/n): "
                 [[ "$continue" != "y" ]] && return 1
             fi
             _save_config "local" "" "$path"
+            echo "⚠️  Local LLM configured (experimental)"
             ;;
         4)
-            echo "\nCurrent configuration:"
-            echo "======================"
-
-            local config_found=false
-
-            # Check file-based configuration
-            if [[ -f "$_CONFIG_FILE" ]]; then
-                echo "\n📁 File-based configuration ($_CONFIG_FILE):"
-                cat "$_CONFIG_FILE"
-                config_found=true
-            else
-                echo "\n📁 File-based configuration: None found"
-            fi
-
-            # Check environment-based configuration
-            echo "\n🌍 Environment-based configuration:"
-            if [[ -n "$SUGGEST_PROVIDER" ]]; then
-                echo "  SUGGEST_PROVIDER: $SUGGEST_PROVIDER"
-                config_found=true
-            else
-                echo "  SUGGEST_PROVIDER: Not set"
-            fi
-
-            if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
-                local token_preview="${SUGGEST_LLM_TOKEN:0:8}...${SUGGEST_LLM_TOKEN: -4}"
-                echo "  SUGGEST_LLM_TOKEN: $token_preview (${#SUGGEST_LLM_TOKEN} chars)"
-                config_found=true
-            else
-                echo "  SUGGEST_LLM_TOKEN: Not set"
-            fi
-
-            if [[ -n "$SUGGEST_LLM_PATH" ]]; then
-                echo "  SUGGEST_LLM_PATH: $SUGGEST_LLM_PATH"
-                config_found=true
-            else
-                echo "  SUGGEST_LLM_PATH: Not set"
-            fi
-
-            # Show effective configuration status
-            echo "\n🎯 Effective status:"
-            if [[ -n "$SUGGEST_PROVIDER" || -n "$SUGGEST_LLM_TOKEN" ]]; then
-                if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
-                    echo "  ✅ Ready to generate suggestions (using environment token)"
-                elif [[ -n "$SUGGEST_PROVIDER" && -f "$_CONFIG_FILE" ]]; then
-                    # Reload config to check file-based token
-                    source "$_CONFIG_FILE"
-                    if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
-                        echo "  ✅ Ready to generate suggestions (using file-based config)"
-                    else
-                        echo "  ⚠️  Provider set but no token available"
-                    fi
-                else
-                    echo "  ⚠️  Provider set but no token available"
-                fi
-            else
-                echo "  ❌ Not configured - run git-suggest-config to set up"
-            fi
-
-            if ! $config_found; then
-                echo "\n💡 No configuration found anywhere."
-            fi
+            _show_current_configuration
             return 0
             ;;
         5)
-            if [[ -f "$_CONFIG_FILE" ]]; then
-                rm "$_CONFIG_FILE"
-                # Clear environment variables
-                unset SUGGEST_PROVIDER
-                unset SUGGEST_LLM_TOKEN
-                unset SUGGEST_LLM_PATH
-                # Reset state
-                _set_suggestion_state "UNCONFIGURED"
-                echo "Configuration cleared."
-                _debug_log "Configuration cleared and state reset to UNCONFIGURED"
-            else
-                echo "No configuration to clear."
-            fi
+            _clear_configuration
             return 0
             ;;
         *)
-            echo "Invalid option"
+            echo "❌ Invalid option"
             return 1
             ;;
     esac
 
-    echo "\nConfiguration saved!"
-    _load_config  # Reload the configuration
+    # Reload configuration after successful setup
+    _load_config
+}
+
+# Function to test OpenAI API key
+_test_openai_key() {
+    local token="$1"
+    local test_response
+
+    test_response=$(curl -s -w "%{http_code}" -o /dev/null \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"test"}],"max_tokens":1}' \
+        "https://api.openai.com/v1/chat/completions" 2>/dev/null)
+
+    [[ "$test_response" == "200" ]]
+}
+
+# Function to test Anthropic API key
+_test_anthropic_key() {
+    local token="$1"
+    local test_response
+
+    test_response=$(curl -s -w "%{http_code}" -o /dev/null \
+        -H "x-api-key: $token" \
+        -H "Content-Type: application/json" \
+        -H "anthropic-version: 2023-06-01" \
+        -d '{"model":"claude-3-haiku-20240307","max_tokens":1,"messages":[{"role":"user","content":"test"}]}' \
+        "https://api.anthropic.com/v1/messages" 2>/dev/null)
+
+    [[ "$test_response" == "200" ]]
+}
+
+# Function to show success message with next steps
+_show_success_message() {
+    local provider="$1"
+    echo ""
+    echo "🎉 Setup Complete!"
+    echo "━━━━━━━━━━━━━━━━━"
+    echo "✅ $provider API configured and tested"
+    echo "🚀 You're ready to generate AI commit messages!"
+    echo ""
+    echo "💡 How to use:"
+    echo "  1. Make some changes to your code"
+    echo "  2. Stage them: git add ."
+    echo "  3. Start commit: git commit -m \""
+    echo "  4. Press Tab to insert AI suggestion!"
+    echo ""
+    echo "🔧 Run 'git-suggest-config' anytime to change settings"
+    echo ""
+    echo "─────────────────────────────────────────────────────"
+    echo "☕ Loving the AI suggestions? Support the creator!"
+    echo "   💖 https://buymeacoffee.com/ngattusohw"
+    echo "   ⭐ https://github.com/ngattusohw/git-commit-suggestions"
+    echo "─────────────────────────────────────────────────────"
+    echo ""
+}
+
+# Function to show current configuration (extracted for reusability)
+_show_current_configuration() {
+    echo ""
+    echo "📋 Current Configuration"
+    echo "═══════════════════════"
+
+    local config_found=false
+
+    # Check file-based configuration
+    if [[ -f "$_CONFIG_FILE" ]]; then
+        echo ""
+        echo "📁 File-based configuration ($_CONFIG_FILE):"
+        cat "$_CONFIG_FILE"
+        config_found=true
+    else
+        echo ""
+        echo "📁 File-based configuration: None found"
+    fi
+
+    # Check environment-based configuration
+    echo ""
+    echo "🌍 Environment-based configuration:"
+    if [[ -n "$SUGGEST_PROVIDER" ]]; then
+        echo "  SUGGEST_PROVIDER: $SUGGEST_PROVIDER"
+        config_found=true
+    else
+        echo "  SUGGEST_PROVIDER: Not set"
+    fi
+
+    if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+        local token_preview="${SUGGEST_LLM_TOKEN:0:8}...${SUGGEST_LLM_TOKEN: -4}"
+        echo "  SUGGEST_LLM_TOKEN: $token_preview (${#SUGGEST_LLM_TOKEN} chars)"
+        config_found=true
+    else
+        echo "  SUGGEST_LLM_TOKEN: Not set"
+    fi
+
+    if [[ -n "$SUGGEST_LLM_PATH" ]]; then
+        echo "  SUGGEST_LLM_PATH: $SUGGEST_LLM_PATH"
+        config_found=true
+    else
+        echo "  SUGGEST_LLM_PATH: Not set"
+    fi
+
+    # Show effective configuration status
+    echo ""
+    echo "🎯 Effective status:"
+    if [[ -n "$SUGGEST_PROVIDER" || -n "$SUGGEST_LLM_TOKEN" ]]; then
+        if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+            echo "  ✅ Ready to generate suggestions (using environment token)"
+        elif [[ -n "$SUGGEST_PROVIDER" && -f "$_CONFIG_FILE" ]]; then
+            # Reload config to check file-based token
+            source "$_CONFIG_FILE" 2>/dev/null
+            if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+                echo "  ✅ Ready to generate suggestions (using file-based config)"
+            else
+                echo "  ⚠️  Provider set but no token available"
+            fi
+        else
+            echo "  ⚠️  Provider set but no token available"
+        fi
+    else
+        echo "  ❌ Not configured - run git-suggest-config to set up"
+    fi
+
+    if ! $config_found; then
+        echo ""
+        echo "💡 No configuration found anywhere."
+        echo "🚀 Run 'git-suggest-config' to get started!"
+    fi
+}
+
+# Function to clear configuration (extracted for reusability)
+_clear_configuration() {
+    echo ""
+    echo "🗑️  Clear Configuration"
+    echo "═════════════════════"
+
+    if [[ -f "$_CONFIG_FILE" || -n "$SUGGEST_PROVIDER" || -n "$SUGGEST_LLM_TOKEN" ]]; then
+        echo "⚠️  This will remove all git-suggest configuration."
+        read "confirm?Are you sure? (y/n): "
+        if [[ "$confirm" == "y" ]]; then
+            [[ -f "$_CONFIG_FILE" ]] && rm "$_CONFIG_FILE"
+            # Clear environment variables in current session
+            unset SUGGEST_PROVIDER
+            unset SUGGEST_LLM_TOKEN
+            unset SUGGEST_LLM_PATH
+            # Reset state
+            _set_suggestion_state "UNCONFIGURED"
+            echo "✅ Configuration cleared successfully."
+            echo "🚀 Run 'git-suggest-config' to set up again."
+            _debug_log "Configuration cleared and state reset to UNCONFIGURED"
+        else
+            echo "❌ Clear cancelled."
+        fi
+    else
+        echo "💡 No configuration to clear."
+    fi
 }
 
 # Load configuration on plugin start

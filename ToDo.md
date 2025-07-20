@@ -60,26 +60,28 @@
 - [x] Improve diff detection and caching
 - [x] Fix loading state display issues
 - [x] Add Tab retry mechanism for suggestions
-- [ ] **Improve onboarding experience for new users**
-  - [ ] Add interactive setup wizard
-  - [ ] Create guided first-run experience
-  - [ ] Add smart defaults and recommendations
-- [ ] **Auto-detection and smart configuration**
-  - [ ] Auto-detect existing API keys in environment
-  - [ ] Suggest optimal provider based on available keys
-  - [ ] Validate API keys during setup
-- [ ] **User-friendly setup process**
-  - [ ] Simplify configuration flow
-  - [ ] Add setup validation with real API tests
-  - [ ] Provide clear success/failure feedback
+- [x] **Improve onboarding experience for new users**
+  - [x] Add interactive setup wizard
+  - [x] Create guided first-run experience with welcome messages
+  - [x] Add smart defaults and recommendations
+  - [x] Add provider comparison with speed/cost information
+- [x] **Auto-detection and smart configuration**
+  - [x] Auto-detect existing API keys in environment (OPENAI_API_KEY, ANTHROPIC_API_KEY)
+  - [x] Suggest optimal provider based on available keys
+  - [x] Validate API keys during setup with real API tests
+- [x] **User-friendly setup process**
+  - [x] Simplify configuration flow with enhanced menu
+  - [x] Add setup validation with real API tests
+  - [x] Provide clear success/failure feedback
+  - [x] Add step-by-step guidance with helpful links
 - [ ] **Documentation and examples**
-  - [ ] Add quick start guide
-  - [ ] Include common setup examples
-  - [ ] Show sample commit messages
-- [ ] **First-time user experience**
-  - [ ] Add welcome message and tips
-  - [ ] Provide usage examples after setup
-  - [ ] Add helpful hints for common workflows
+  - [x] Add quick start guide in setup wizard
+  - [ ] Include common setup examples in documentation
+  - [ ] Show sample commit messages during setup
+- [x] **First-time user experience**
+  - [x] Add welcome message and tips
+  - [x] Provide usage examples after setup
+  - [x] Add helpful hints for common workflows
 - [ ] Move suggestion generation to git add for better performance
 - [ ] Add progress indicators for long-running operations
 - [ ] Improve suggestion formatting
