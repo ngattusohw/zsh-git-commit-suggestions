@@ -52,7 +52,7 @@ _update_staged_diff() {
             _debug_log "New files detected: $new_files"
             # For new files, get their content
             while IFS= read -r line; do
-                if [[ "$line" =~ ^A[[:space:]]+(.*) ]]; then
+                if [[ "$line" =~ ^A[[:space:]]+(.+)$ ]]; then
                     local file="${BASH_REMATCH[1]}"
                     _debug_log "Getting content for new file: $file"
                     if [[ -n "$file" && -f "$file" ]]; then
@@ -197,10 +197,11 @@ _post_git_command() {
             local tmp_file="/tmp/git-suggestion-temp-diff-${parent_pid}"
             local suggestion_state_file="/tmp/git-suggestion-state-${parent_pid}"
             local suggestion_file="/tmp/git-suggestion-${parent_pid}"
+            local plugin_path="${0:A}"
             echo "$_CACHED_STAGED_DIFF" > "$tmp_file"
 
             # Use a helper function to safely background the process
-            _run_background_suggestion "$tmp_file" "$suggestion_file" "$suggestion_state_file"
+            _run_background_suggestion "$tmp_file" "$suggestion_file" "$suggestion_state_file" "$plugin_path"
         fi
 
         # Clear the last command
@@ -706,16 +707,7 @@ _openai_generate() {
     "messages": [
         {
             "role": "system",
-            "content": "
-                You are a helpful assistant that generates concise, conventional commit messages based on git diffs.
-                Try to be as concise as possible, but don't sacrifice clarity. Additionally, instead of just describing the changes in each file,
-                try to infer the purpose of the changes and describe it in a single sentence if possible across multiple files.
-                For example, if we add a new api route, in the backend, and a new page in the front end with somewhat matching
-                naming, you can infer that the changes are related to a single full stack feature, and say something like added new settings page to configure token saving, for example.
-                For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small.
-                Use a semantic commit prefix. and add a cool emoji if applicable.
-                AT ALL COSTS, AVOID USING SPECIAL QUOTE CHARACTERS SUCH AS \`, as this will break the json parser.
-                "
+            "content": "Generate concise, single-line git commit messages from diffs. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep under 72 characters. Focus on the main purpose, not implementation details. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies'. No backticks or special quotes."
         },
         {
             "role": "user",
@@ -836,7 +828,7 @@ _anthropic_generate() {
     "messages": [
         {
             "role": "user",
-            "content": "You are a helpful assistant that generates concise, conventional commit messages based on git diffs. Try to be as concise as possible, but don't sacrifice clarity. Additionally, instead of just describing the changes in each file, try to infer the purpose of the changes and describe it in a single sentence if possible across multiple files. For example, if we add a new api route, in the backend, and a new page in the front end with somewhat matching naming, you can infer that the changes are related to a single full stack feature, and say something like added new settings page to configure token saving, for example. For large diffs, you can use more than one sentence, but try to keep the total length down to something reasonable. Keep the descriptions high level as possible, unless there is a small amount of changes. You can be more specific if the diff is small. Use a semantic commit prefix. and add a cool emoji if applicable. AT ALL COSTS, AVOID USING SPECIAL QUOTE CHARACTERS SUCH AS backticks, as this will break the json parser.\n\nGenerate a commit message for this diff:\n\n${escaped_diff}"
+            "content": "Generate a concise, single-line git commit message from this diff. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. Focus on the main purpose, not implementation details. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies'. No backticks or special quotes.\n\nDiff:\n${escaped_diff}"
         }
     ]
 }
@@ -939,6 +931,7 @@ _run_background_suggestion() {
     local tmp_file="$1"
     local suggestion_file="$2"
     local suggestion_state_file="$3"
+    local plugin_path="$4"
 
     # Pass current config to background process via environment
     local bg_provider="$SUGGEST_PROVIDER"
@@ -951,33 +944,82 @@ _run_background_suggestion() {
 
     # Use a simpler background approach with complete output suppression and error handling
     {
+        # Log start of background process
+        echo "[$(date '+%H:%M:%S')] Background process started" >> /tmp/git-completion-debug.log 2>/dev/null
+
         # Ensure we have access to required resources
-        [[ -w "/tmp" ]] || exit 1
-        [[ -r "$tmp_file" ]] || exit 1
+        [[ -w "/tmp" ]] || { echo "[$(date '+%H:%M:%S')] No write access to /tmp" >> /tmp/git-completion-debug.log 2>/dev/null; exit 1; }
+        [[ -r "$tmp_file" ]] || { echo "[$(date '+%H:%M:%S')] Cannot read input file: $tmp_file" >> /tmp/git-completion-debug.log 2>/dev/null; exit 1; }
 
         # Set config for background process
         export SUGGEST_PROVIDER="$bg_provider"
         export SUGGEST_LLM_TOKEN="$bg_token"
         export SUGGEST_LLM_PATH="$bg_path"
 
+        echo "[$(date '+%H:%M:%S')] Config set: provider=$SUGGEST_PROVIDER" >> /tmp/git-completion-debug.log 2>/dev/null
+
         # Restore PATH for external commands
         PATH="$_ORIGINAL_PATH"
-        source "${0:A}" 2>/dev/null || exit 1
 
-        suggestion=$(_generate_commit_suggestions < "$tmp_file" 2>/dev/null)
+        # Read the diff directly instead of re-sourcing
+        local diff_content=$(cat "$tmp_file")
+        echo "[$(date '+%H:%M:%S')] About to generate suggestion, diff length: ${#diff_content}" >> /tmp/git-completion-debug.log 2>/dev/null
+
+        # Call the LLM provider directly based on the provider type
+        local suggestion=""
+        case "$SUGGEST_PROVIDER" in
+            "anthropic")
+                # Anthropic API call
+                local escaped_diff=$(echo "$diff_content" | LC_ALL=C sed 's/[^[:print:]\n]//g; s/\\/\\\\/g; s/"/\\"/g' | tr -d '\r' | tr '\n' ' ')
+                local tmp_json=$(mktemp)
+
+                # Construct JSON properly without placeholders
+                cat > "$tmp_json" << EOF
+{
+    "model": "claude-3-haiku-20240307",
+    "max_tokens": 200,
+    "messages": [
+        {
+            "role": "user",
+            "content": "Generate a concise, single-line git commit message from this diff. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. Focus on the main purpose, not implementation details. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies'. No backticks or special quotes.\\n\\nDiff:\\n${escaped_diff}"
+        }
+    ]
+}
+EOF
+
+                local response=$(curl -s -H "Content-Type: application/json" \
+                    -H "x-api-key: $SUGGEST_LLM_TOKEN" \
+                    -H "anthropic-version: 2023-06-01" \
+                    -d "@$tmp_json" \
+                    "https://api.anthropic.com/v1/messages")
+
+                # Extract suggestion using the same method as the main function
+                suggestion=$(echo "$response" | sed 's/.*"text":"//; s/"}].*//' | sed 's/\\n/\n/g; s/:sparkles:/✨/g; s/:rocket:/🚀/g; s/:bug:/🐛/g; s/:wrench:/🔧/g; s/:zap:/⚡/g')
+                rm -f "$tmp_json"
+                ;;
+            *)
+                echo "[$(date '+%H:%M:%S')] Unsupported provider: $SUGGEST_PROVIDER" >> /tmp/git-completion-debug.log 2>/dev/null
+                ;;
+        esac
+
+        local gen_result=$?
+        echo "[$(date '+%H:%M:%S')] Generation result: $gen_result, suggestion length: ${#suggestion}" >> /tmp/git-completion-debug.log 2>/dev/null
+
         if [[ -n "$suggestion" ]]; then
-            echo "We have a suggestion from the background process: $suggestion" >> /tmp/git-completion-debug.log 2>/dev/null
+            echo "[$(date '+%H:%M:%S')] We have a suggestion from the background process: $suggestion" >> /tmp/git-completion-debug.log 2>/dev/null
             # Clean up the suggestion text - remove any extra formatting
             suggestion=$(echo "$suggestion" | sed '/^$/d')
             echo "$suggestion" > "$suggestion_file" 2>/dev/null
             echo "READY" > "$suggestion_state_file" 2>/dev/null
+            echo "[$(date '+%H:%M:%S')] Files written successfully" >> /tmp/git-completion-debug.log 2>/dev/null
         else
             # Write error state if generation failed
-            echo "Background generation failed, writing error state" >> /tmp/git-completion-debug.log 2>/dev/null
+            echo "[$(date '+%H:%M:%S')] Background generation failed, writing error state" >> /tmp/git-completion-debug.log 2>/dev/null
             echo "ERROR" > "$suggestion_state_file" 2>/dev/null
             echo "${_SUGGESTION_ERROR:-Failed to generate suggestion}" > "${suggestion_file%.tmp}.error" 2>/dev/null
         fi
         rm -f "$tmp_file" 2>/dev/null
+        echo "[$(date '+%H:%M:%S')] Background process completed" >> /tmp/git-completion-debug.log 2>/dev/null
     } </dev/null >/dev/null 2>&1 &!
 }
 

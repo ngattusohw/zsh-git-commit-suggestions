@@ -1,0 +1,1 @@
+Testing direct API approach without plugin re-sourcing

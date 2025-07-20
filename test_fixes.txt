@@ -1,1 +1,1 @@
-Testing all the fixes for job control and output formatting
+Testing file parsing fixes and improved error handling

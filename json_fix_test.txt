@@ -1,0 +1,1 @@
+Testing fixed JSON construction for Anthropic API
