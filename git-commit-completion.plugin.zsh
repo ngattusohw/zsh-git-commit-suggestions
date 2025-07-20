@@ -249,7 +249,11 @@ _show_suggestion() {
 
     case $_SUGGESTION_STATE in
         "UNCONFIGURED")
-            print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
+            if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+                print -P "%F{yellow}⚠ Configuration detected in environment but no provider set. Run %F{green}git-suggest-config%f%F{yellow} to complete setup.%f"
+            else
+                print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
+            fi
             ;;
         "LOADING")
             print -P "%F{blue}⟳ Generating commit suggestion... (Press Tab to check if ready)%f"
@@ -439,7 +443,12 @@ _accept_suggestion() {
         fi
         zle reset-prompt
     elif [[ "$_SUGGESTION_STATE" == "UNCONFIGURED" ]]; then
-        print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
+        if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+            print -P "%F{yellow}⚠ Token found in environment but no provider configured.%f"
+            print -P "%F{yellow}Run %F{green}git-suggest-config%f%F{yellow} to complete setup, or set SUGGEST_PROVIDER env var.%f"
+        else
+            print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
+        fi
         zle reset-prompt
     fi
 }
@@ -549,11 +558,66 @@ _git_suggest_config() {
             _save_config "local" "" "$path"
             ;;
         4)
+            echo "\nCurrent configuration:"
+            echo "======================"
+
+            local config_found=false
+
+            # Check file-based configuration
             if [[ -f "$_CONFIG_FILE" ]]; then
-                echo "\nCurrent configuration:"
+                echo "\n📁 File-based configuration ($_CONFIG_FILE):"
                 cat "$_CONFIG_FILE"
+                config_found=true
             else
-                echo "\nNo configuration found."
+                echo "\n📁 File-based configuration: None found"
+            fi
+
+            # Check environment-based configuration
+            echo "\n🌍 Environment-based configuration:"
+            if [[ -n "$SUGGEST_PROVIDER" ]]; then
+                echo "  SUGGEST_PROVIDER: $SUGGEST_PROVIDER"
+                config_found=true
+            else
+                echo "  SUGGEST_PROVIDER: Not set"
+            fi
+
+            if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+                local token_preview="${SUGGEST_LLM_TOKEN:0:8}...${SUGGEST_LLM_TOKEN: -4}"
+                echo "  SUGGEST_LLM_TOKEN: $token_preview (${#SUGGEST_LLM_TOKEN} chars)"
+                config_found=true
+            else
+                echo "  SUGGEST_LLM_TOKEN: Not set"
+            fi
+
+            if [[ -n "$SUGGEST_LLM_PATH" ]]; then
+                echo "  SUGGEST_LLM_PATH: $SUGGEST_LLM_PATH"
+                config_found=true
+            else
+                echo "  SUGGEST_LLM_PATH: Not set"
+            fi
+
+            # Show effective configuration status
+            echo "\n🎯 Effective status:"
+            if [[ -n "$SUGGEST_PROVIDER" || -n "$SUGGEST_LLM_TOKEN" ]]; then
+                if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+                    echo "  ✅ Ready to generate suggestions (using environment token)"
+                elif [[ -n "$SUGGEST_PROVIDER" && -f "$_CONFIG_FILE" ]]; then
+                    # Reload config to check file-based token
+                    source "$_CONFIG_FILE"
+                    if [[ -n "$SUGGEST_LLM_TOKEN" ]]; then
+                        echo "  ✅ Ready to generate suggestions (using file-based config)"
+                    else
+                        echo "  ⚠️  Provider set but no token available"
+                    fi
+                else
+                    echo "  ⚠️  Provider set but no token available"
+                fi
+            else
+                echo "  ❌ Not configured - run git-suggest-config to set up"
+            fi
+
+            if ! $config_found; then
+                echo "\n💡 No configuration found anywhere."
             fi
             return 0
             ;;
