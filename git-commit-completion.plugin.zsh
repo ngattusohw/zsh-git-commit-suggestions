@@ -498,25 +498,45 @@ EOF
     _debug_log "Configuration saved to $_CONFIG_FILE"
 }
 
+# Helper function for typewriter text animation
+_animate_text() {
+    local text="$1"
+    local delay="${2:-0.03}"
+
+    for (( i=0; i<${#text}; i++ )); do
+        echo -n "${text:$i:1}"
+        sleep "$delay"
+    done
+    echo ""
+}
+
 # Enhanced configuration function with improved onboarding
 _git_suggest_config() {
     # Restore PATH at the start of the function
     PATH="$_ORIGINAL_PATH"
 
-    # Cool ASCII pixel art header
+    # Animated GAT ASCII art header (just the art, not everything)
     echo ""
     echo "    ╔═══════════════════════════════════════════════════════════╗"
     echo "    ║                                                           ║"
-    echo "    ║   ████████   █████████  ████████                         ║"
-    echo "    ║   ██         ██     ██     ██                            ║"
-    echo "    ║   ██  ████   █████████     ██                            ║"
-    echo "    ║   ██    ██   ██     ██     ██                            ║"
-    echo "    ║   ████████   ██     ██     ██                            ║"
+    sleep 0.2
+    echo "    ║   ████████   █████████  ████████                          ║"
+    sleep 0.2
+    echo "    ║   ██         ██     ██     ██                             ║"
+    sleep 0.2
+    echo "    ║   ██  ████   █████████     ██                             ║"
+    sleep 0.2
+    echo "    ║   ██    ██   ██     ██     ██                             ║"
+    sleep 0.2
+    echo "    ║   ████████   ██     ██     ██                             ║"
     echo "    ║                                                           ║"
-    echo "    ║           🤖 Git AI Tool - Smart Commit Messages          ║"
+    echo "    ║          🤖 Git AI Tool - Smart Commit Messages           ║"
     echo "    ║                                                           ║"
     echo "    ╚═══════════════════════════════════════════════════════════╝"
     echo ""
+
+    # Dramatic pause before showing the rest
+    sleep 0.7
 
     # Check if this is first-time setup
     local is_first_time=false
@@ -527,7 +547,7 @@ _git_suggest_config() {
         has_config=true
     fi
 
-    # Welcome message for first-time users
+    # Welcome message for first-time users (no animation)
     if $is_first_time; then
         echo "🚀 Welcome to Git Commit Suggestions!"
         echo "====================================="
@@ -541,7 +561,7 @@ _git_suggest_config() {
         echo ""
     fi
 
-    # Show current configuration if it exists
+    # Show current configuration if it exists (no animation)
     if $has_config; then
         echo "📋 Current Configuration:"
         echo "========================"
@@ -611,7 +631,7 @@ _git_suggest_config() {
         has_detections=true
     fi
 
-    # Show auto-detected keys
+    # Show auto-detected keys (no animation)
     if $has_detections; then
         echo "🔍 Auto-detected API keys in your environment:"
         [[ -n "$detected_openai" ]] && echo "  ✅ OpenAI API key found (${detected_openai:0:8}...)"
@@ -619,7 +639,7 @@ _git_suggest_config() {
         echo ""
     fi
 
-    # Enhanced menu with recommendations and current config indicators
+    # Menu with recommendations and current config indicators (no animation)
     echo "Choose your AI provider:"
     echo ""
 
@@ -660,9 +680,12 @@ _git_suggest_config() {
     echo "   • Cost: Free (after setup)"
     echo "   • Quality: Depends on model"
     echo ""
+
     echo "4. 📋 View current configuration"
     echo "5. 🗑️  Clear configuration"
     echo ""
+
+    # Coffee support section
     echo "─────────────────────────────────────────────────────────────────"
     echo "☕ Enjoying this plugin? Buy the creator a coffee!"
     echo "   💖 https://buymeacoffee.com/ngattusohw"
