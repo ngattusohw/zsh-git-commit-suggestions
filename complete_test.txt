@@ -1,1 +1,0 @@
-Complete end-to-end test of working Anthropic integration

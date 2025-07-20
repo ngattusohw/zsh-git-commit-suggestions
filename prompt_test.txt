@@ -1,1 +1,0 @@
-Testing improved concise prompts for both OpenAI and Anthropic providers
