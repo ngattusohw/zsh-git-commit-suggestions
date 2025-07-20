@@ -2,12 +2,13 @@
 
 ## Known Issues
 
-- Job control messages (process IDs) are displayed when running background suggestion generation
+- ~~Job control messages (process IDs) are displayed when running background suggestion generation~~ ✅ FIXED
 
 ### Configuration Management
 
 - [x] Implement persistent configuration storage (~/.git-suggest-config)
 - [x] Add basic configuration validation
+- [x] Improve configuration display to show both file and environment sources
 - [ ] Enhance configuration validation (API key formats, file permissions)
 - [ ] Support multiple configuration profiles
 - [x] Add command to view current configuration
@@ -20,7 +21,7 @@
 - [x] Complete LLM provider abstraction layer
 - [x] Implement OpenAI provider (basic functionality)
 - [ ] Enhance OpenAI provider with better error handling
-- [ ] Implement Anthropic provider
+- [x] Implement Anthropic provider
 - [x] Add initial local model support
 - [ ] Enhance local model support (model validation, format checking)
 - [ ] Add rate limiting and token usage tracking
@@ -43,6 +44,9 @@
 - [x] Implement basic state management
 - [x] Add basic error messaging
 - [x] Add basic API error handling
+- [x] Improve error state persistence and display
+- [x] Add Tab retry mechanism for loading states
+- [x] Fix job control messages during background processing
 - [ ] Enhance API error handling (rate limits, network issues)
 - [ ] Implement token validation
 - [ ] Add graceful fallbacks for errors
@@ -50,11 +54,32 @@
 - [ ] Add error logging and reporting
 - [ ] Implement retry mechanisms for transient failures
 
-### User Experience
+### User Experience & Onboarding
 
 - [x] Add state-based feedback messages
 - [x] Improve diff detection and caching
-- [ ] Fix loading state display issues
+- [x] Fix loading state display issues
+- [x] Add Tab retry mechanism for suggestions
+- [ ] **Improve onboarding experience for new users**
+  - [ ] Add interactive setup wizard
+  - [ ] Create guided first-run experience
+  - [ ] Add smart defaults and recommendations
+- [ ] **Auto-detection and smart configuration**
+  - [ ] Auto-detect existing API keys in environment
+  - [ ] Suggest optimal provider based on available keys
+  - [ ] Validate API keys during setup
+- [ ] **User-friendly setup process**
+  - [ ] Simplify configuration flow
+  - [ ] Add setup validation with real API tests
+  - [ ] Provide clear success/failure feedback
+- [ ] **Documentation and examples**
+  - [ ] Add quick start guide
+  - [ ] Include common setup examples
+  - [ ] Show sample commit messages
+- [ ] **First-time user experience**
+  - [ ] Add welcome message and tips
+  - [ ] Provide usage examples after setup
+  - [ ] Add helpful hints for common workflows
 - [ ] Move suggestion generation to git add for better performance
 - [ ] Add progress indicators for long-running operations
 - [ ] Improve suggestion formatting
@@ -69,7 +94,15 @@
 
 - [ ] Add unit tests for core functionality
 - [ ] Add integration tests for LLM providers
-- [ ] Create user documentation
+- [ ] **Create comprehensive user documentation**
+  - [ ] Write detailed README with installation guide
+  - [ ] Add setup and configuration documentation
+  - [ ] Include troubleshooting section
+  - [ ] Add FAQ for common issues
+- [ ] **Installation and setup instructions**
+  - [ ] Add multiple installation methods
+  - [ ] Include dependency requirements
+  - [ ] Provide platform-specific instructions
 - [ ] Add configuration examples
 - [ ] Document prompt templates
 - [ ] Add troubleshooting guide

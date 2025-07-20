@@ -145,11 +145,8 @@ _generate_commit_suggestions() {
     _set_suggestion_state "READY"
     _debug_log "Successfully generated suggestion"
 
-    cat << EOF
-
-Suggested commit message:
-$suggestion
-EOF
+    # Return just the suggestion without formatting
+    echo "$suggestion"
 }
 
 # Hook function to run after git commands
@@ -202,33 +199,8 @@ _post_git_command() {
             local suggestion_file="/tmp/git-suggestion-${parent_pid}"
             echo "$_CACHED_STAGED_DIFF" > "$tmp_file"
 
-            # Run in background with proper job control handling and output redirection
-            {
-                exec 1>/dev/null 2>&1
-
-                source "${0:A}"
-                _load_config
-                suggestion=$(_generate_commit_suggestions < "$tmp_file")
-                if [[ -n "$suggestion" ]]; then
-                    _debug_log "We have a suggestion from the background process: $suggestion"
-                    # suggestion=${suggestion#"Suggested commit message:"}
-                    # suggestion=${suggestion#$'\n'}
-                    echo "$suggestion" > "$suggestion_file"
-                    echo "READY" > "$suggestion_state_file"
-                else
-                    # Write error state if generation failed
-                    _debug_log "Background generation failed, writing error state"
-                    echo "ERROR" > "$suggestion_state_file"
-                    echo "${_SUGGESTION_ERROR:-Failed to generate suggestion}" > "${suggestion_file%.tmp}.error"
-                fi
-                rm -f "$tmp_file"
-            } 2>/dev/null &
-
-            disown %%
-
-            # Don't load old suggestion immediately
-            # Let the background process complete and update the state
-            _debug_log "Background generation process started"
+            # Use a helper function to safely background the process
+            _run_background_suggestion "$tmp_file" "$suggestion_file" "$suggestion_state_file"
         fi
 
         # Clear the last command
@@ -960,5 +932,52 @@ _local_generate() {
 
     # Will implement the actual local LLM call here
     return 1
+}
+
+# Helper function for safe background processing
+_run_background_suggestion() {
+    local tmp_file="$1"
+    local suggestion_file="$2"
+    local suggestion_state_file="$3"
+
+    # Pass current config to background process via environment
+    local bg_provider="$SUGGEST_PROVIDER"
+    local bg_token="$SUGGEST_LLM_TOKEN"
+    local bg_path="$SUGGEST_LLM_PATH"
+
+    # Validate inputs before starting background process
+    [[ -z "$tmp_file" || -z "$suggestion_file" || -z "$suggestion_state_file" ]] && return 1
+    [[ ! -f "$tmp_file" ]] && return 1
+
+    # Use a simpler background approach with complete output suppression and error handling
+    {
+        # Ensure we have access to required resources
+        [[ -w "/tmp" ]] || exit 1
+        [[ -r "$tmp_file" ]] || exit 1
+
+        # Set config for background process
+        export SUGGEST_PROVIDER="$bg_provider"
+        export SUGGEST_LLM_TOKEN="$bg_token"
+        export SUGGEST_LLM_PATH="$bg_path"
+
+        # Restore PATH for external commands
+        PATH="$_ORIGINAL_PATH"
+        source "${0:A}" 2>/dev/null || exit 1
+
+        suggestion=$(_generate_commit_suggestions < "$tmp_file" 2>/dev/null)
+        if [[ -n "$suggestion" ]]; then
+            echo "We have a suggestion from the background process: $suggestion" >> /tmp/git-completion-debug.log 2>/dev/null
+            # Clean up the suggestion text - remove any extra formatting
+            suggestion=$(echo "$suggestion" | sed '/^$/d')
+            echo "$suggestion" > "$suggestion_file" 2>/dev/null
+            echo "READY" > "$suggestion_state_file" 2>/dev/null
+        else
+            # Write error state if generation failed
+            echo "Background generation failed, writing error state" >> /tmp/git-completion-debug.log 2>/dev/null
+            echo "ERROR" > "$suggestion_state_file" 2>/dev/null
+            echo "${_SUGGESTION_ERROR:-Failed to generate suggestion}" > "${suggestion_file%.tmp}.error" 2>/dev/null
+        fi
+        rm -f "$tmp_file" 2>/dev/null
+    } </dev/null >/dev/null 2>&1 &!
 }
 
