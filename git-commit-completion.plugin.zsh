@@ -214,7 +214,12 @@ _post_git_command() {
                     # suggestion=${suggestion#"Suggested commit message:"}
                     # suggestion=${suggestion#$'\n'}
                     echo "$suggestion" > "$suggestion_file"
-                    echo "READY" > "$suggestion_state_file"  # Persist the state
+                    echo "READY" > "$suggestion_state_file"
+                else
+                    # Write error state if generation failed
+                    _debug_log "Background generation failed, writing error state"
+                    echo "ERROR" > "$suggestion_state_file"
+                    echo "${_SUGGESTION_ERROR:-Failed to generate suggestion}" > "${suggestion_file%.tmp}.error"
                 fi
                 rm -f "$tmp_file"
             } 2>/dev/null &
@@ -321,16 +326,28 @@ _git_commit_quote_handler() {
         fi
 
 
-        if [[ -f "/tmp/git-suggestion-${$}" ]]; then
-            # _set_suggestion_state "READY"
-            _debug_log "Existing suggestion"
-            _debug_log "Commit suggestion from file: $(cat /tmp/git-suggestion-${$})"
-            _debug_log "State: $_SUGGESTION_STATE"
-            _debug_log "Suggestion: $_COMMIT_SUGGESTION"
-            _COMMIT_SUGGESTION=$(cat /tmp/git-suggestion-${$})
-            _set_suggestion_state "READY"
-            _debug_log "Removing suggestion file"
+        # Check for any completed background job (success or error)
+        local suggestion_file="/tmp/git-suggestion-${$}"
+        local state_file="/tmp/git-suggestion-state-${$}"
+        local error_file="${suggestion_file%.tmp}.error"
 
+        if [[ -f "$state_file" ]]; then
+            local bg_state=$(cat "$state_file")
+            if [[ "$bg_state" == "READY" && -f "$suggestion_file" ]]; then
+                _debug_log "Existing suggestion found"
+                _COMMIT_SUGGESTION=$(cat "$suggestion_file")
+                _set_suggestion_state "READY"
+                rm -f "$suggestion_file" "$state_file" "$error_file"
+                _debug_log "Loaded and cleaned up suggestion files"
+            elif [[ "$bg_state" == "ERROR" ]]; then
+                local error_msg="Failed to generate suggestion"
+                if [[ -f "$error_file" ]]; then
+                    error_msg=$(cat "$error_file")
+                fi
+                _set_suggestion_state "ERROR" "$error_msg"
+                rm -f "$suggestion_file" "$state_file" "$error_file"
+                _debug_log "Loaded error state: $error_msg"
+            fi
         fi
 
          # Use existing suggestion if available
@@ -378,11 +395,24 @@ _accept_suggestion() {
     if [[ "$_SUGGESTION_STATE" == "LOADING" ]]; then
         local suggestion_file="/tmp/git-suggestion-${$}"
         local state_file="/tmp/git-suggestion-state-${$}"
-        if [[ -f "$suggestion_file" && -f "$state_file" && $(cat "$state_file") == "READY" ]]; then
-            _COMMIT_SUGGESTION=$(cat "$suggestion_file")
-            _set_suggestion_state "READY"
-            rm -f "$suggestion_file" "$state_file"
-            _debug_log "Loaded completed suggestion from background job"
+        local error_file="${suggestion_file%.tmp}.error"
+
+        if [[ -f "$state_file" ]]; then
+            local bg_state=$(cat "$state_file")
+            if [[ "$bg_state" == "READY" && -f "$suggestion_file" ]]; then
+                _COMMIT_SUGGESTION=$(cat "$suggestion_file")
+                _set_suggestion_state "READY"
+                rm -f "$suggestion_file" "$state_file" "$error_file"
+                _debug_log "Loaded completed suggestion from background job"
+            elif [[ "$bg_state" == "ERROR" ]]; then
+                local error_msg="Failed to generate suggestion"
+                if [[ -f "$error_file" ]]; then
+                    error_msg=$(cat "$error_file")
+                fi
+                _set_suggestion_state "ERROR" "$error_msg"
+                rm -f "$suggestion_file" "$state_file" "$error_file"
+                _debug_log "Loaded error state from background job: $error_msg"
+            fi
         fi
     fi
 
@@ -397,6 +427,19 @@ _accept_suggestion() {
         zle reset-prompt
     elif [[ "$_SUGGESTION_STATE" == "LOADING" ]]; then
         print -P "%F{blue}⟳ Still generating... Press Tab again to check.%f"
+        zle reset-prompt
+    elif [[ "$_SUGGESTION_STATE" == "ERROR" ]]; then
+        print -P "%F{red}✖ Error: $_SUGGESTION_ERROR%f"
+        if [[ "$_SUGGESTION_ERROR" == *"API key"* || "$_SUGGESTION_ERROR" == *"token"* ]]; then
+            print -P "%F{yellow}Run %F{green}git-suggest-config%f%F{yellow} to fix your API configuration.%f"
+        elif [[ "$_SUGGESTION_ERROR" == *"No staged changes"* ]]; then
+            print -P "%F{yellow}Stage some changes with %F{green}git add%f%F{yellow} first.%f"
+        else
+            print -P "%F{yellow}Run %F{green}git-suggest-config%f%F{yellow} to check your configuration.%f"
+        fi
+        zle reset-prompt
+    elif [[ "$_SUGGESTION_STATE" == "UNCONFIGURED" ]]; then
+        print -P "%F{yellow}⚠ LLM not configured. Run %F{green}git-suggest-config%f%F{yellow} to set up.%f"
         zle reset-prompt
     fi
 }
