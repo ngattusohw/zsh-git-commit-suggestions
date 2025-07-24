@@ -14,6 +14,7 @@
 - [x] Add command to view current configuration
 - [x] Add command to clear configuration
 - [ ] Add configuration backup/restore functionality
+- [ ] configuration should persist across multple shell instances -- bug where I am having to put my llm key in multiple times
 
 ### LLM Integration
 
