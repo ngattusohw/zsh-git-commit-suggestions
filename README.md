@@ -19,7 +19,7 @@ An intelligent zsh plugin that generates concise, conventional commit messages b
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/yourusername/zsh-git-commit-suggestions \
+   git clone https://github.com/ngattusohw/zsh-git-commit-suggestions \
      $ZSH_CUSTOM/plugins/git-commit-completion
    ```
 
@@ -38,7 +38,7 @@ An intelligent zsh plugin that generates concise, conventional commit messages b
 
 1. **Clone and source the plugin:**
    ```bash
-   git clone https://github.com/yourusername/zsh-git-commit-suggestions
+   git clone https://github.com/ngattusohw/zsh-git-commit-suggestions
    echo "source /path/to/git-commit-completion.plugin.zsh" >> ~/.zshrc
    source ~/.zshrc
    ```
