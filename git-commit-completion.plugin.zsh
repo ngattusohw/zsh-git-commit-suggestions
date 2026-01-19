@@ -128,10 +128,15 @@ _generate_commit_suggestions() {
     fi
 
     _set_suggestion_state "LOADING"
-    _debug_log "Calling LLM provider"
+    _debug_log "Calling LLM provider with smart diff analysis"
+
+    # Use smart diff analysis for large commits
+    local processed_diff
+    processed_diff=$(_analyze_and_summarize_diff "$_CACHED_STAGED_DIFF")
+    _debug_log "Processed diff length: ${#processed_diff}"
 
     local suggestion
-    suggestion=$(_llm_generate_suggestion "$_CACHED_STAGED_DIFF")
+    suggestion=$(_llm_generate_suggestion "$processed_diff")
     local result=$?
 
     if [[ $result -ne 0 || -z "$suggestion" ]]; then
@@ -1630,11 +1635,11 @@ _openai_generate() {
     "messages": [
         {
             "role": "system",
-            "content": "Generate concise, single-line git commit messages from diffs. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep under 72 characters. Focus on the main purpose, not implementation details. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies'. No backticks or special quotes."
+            "content": "Generate concise, single-line git commit messages from diffs or commit analysis. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep under 72 characters. For large commits, focus on the main theme rather than individual changes. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies', 'refactor: 🔄 restructure auth system', 'feat: ✨ implement user dashboard (5 components)'. No backticks or special quotes."
         },
         {
             "role": "user",
-            "content": "Generate a commit message for this diff:\n\n${escaped_diff}"
+            "content": "Generate a commit message for this change:\n\n${escaped_diff}"
         }
     ]
 }
@@ -1751,7 +1756,7 @@ _anthropic_generate() {
     "messages": [
         {
             "role": "user",
-            "content": "Generate a concise, single-line git commit message from this diff. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. Focus on the main purpose, not implementation details. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies'. No backticks or special quotes.\n\nDiff:\n${escaped_diff}"
+            "content": "Generate a concise, single-line git commit message from this diff or commit analysis. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. For large commits, focus on the main theme rather than individual changes. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies', 'refactor: 🔄 restructure auth system', 'feat: ✨ implement user dashboard (5 components)'. No backticks or special quotes.\n\nChange:\n${escaped_diff}"
         }
     ]
 }
@@ -1911,7 +1916,7 @@ _grok_generate() {
     "messages": [
         {
             "role": "user",
-            "content": "Generate a concise, single-line git commit message from this diff. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. Focus on the main purpose, not implementation details. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies'. No backticks or special quotes.\n\nDiff:\n${escaped_diff}"
+            "content": "Generate a concise, single-line git commit message from this diff or commit analysis. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. For large commits, focus on the main theme rather than individual changes. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies', 'refactor: 🔄 restructure auth system', 'feat: ✨ implement user dashboard (5 components)'. No backticks or special quotes.\n\nChange:\n${escaped_diff}"
         }
     ]
 }
@@ -1952,7 +1957,7 @@ EOF
     "messages": [
         {
             "role": "user",
-            "content": "Generate a concise, single-line git commit message from this diff. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. Focus on the main purpose, not implementation details. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies'. No backticks or special quotes.\n\nDiff:\n${escaped_diff}"
+            "content": "Generate a concise, single-line git commit message from this diff or commit analysis. Use conventional commit format (feat/fix/chore/etc) with an emoji. Keep it under 72 characters. For large commits, focus on the main theme rather than individual changes. Examples: 'feat: ✨ add user authentication', 'fix: 🐛 resolve login timeout', 'chore: 🔧 update dependencies', 'refactor: 🔄 restructure auth system', 'feat: ✨ implement user dashboard (5 components)'. No backticks or special quotes.\n\nChange:\n${escaped_diff}"
         }
     ]
 }
@@ -2192,5 +2197,136 @@ EOF
         rm -f "$tmp_file" 2>/dev/null
         echo "[$(date '+%H:%M:%S')] Background process completed" >> /tmp/git-completion-debug.log 2>/dev/null
     } </dev/null >/dev/null 2>&1 &!
+}
+
+# Smart diff analysis and summarization for large commits
+_analyze_and_summarize_diff() {
+    local diff="$1"
+    local max_size="${2:-8000}"  # Default 8KB limit for LLM context
+
+    _debug_log "=== Smart Diff Analysis ==="
+    _debug_log "Raw diff size: ${#diff} characters"
+
+    # If diff is small enough, return as-is
+    if [[ ${#diff} -le $max_size ]]; then
+        _debug_log "Diff is small enough, sending as-is"
+        echo "$diff"
+        return 0
+    fi
+
+    # Get file statistics
+    local files_changed=$(git diff --staged --name-only | wc -l | tr -d ' ')
+    local lines_added=$(git diff --staged --numstat | awk '{sum+=$1} END {print sum+0}')
+    local lines_removed=$(git diff --staged --numstat | awk '{sum+=$2} END {print sum+0}')
+
+    _debug_log "Files changed: $files_changed, Lines +$lines_added/-$lines_removed"
+
+    # Categorize files by type and importance
+    local core_files=()
+    local config_files=()
+    local test_files=()
+    local doc_files=()
+    local generated_files=()
+    local other_files=()
+
+    while IFS= read -r file; do
+        [[ -z "$file" ]] && continue
+
+        case "$file" in
+            # Generated/noise files (usually skip)
+            package-lock.json|yarn.lock|composer.lock|Pipfile.lock|Gemfile.lock)
+                generated_files+=("$file") ;;
+            **/node_modules/**|**/vendor/**|**/.next/**|**/dist/**|**/build/**)
+                generated_files+=("$file") ;;
+
+            # Configuration files
+            *.config.js|*.config.ts|webpack.config.*|babel.config.*|tsconfig.json|*.env*|Dockerfile|docker-compose.*)
+                config_files+=("$file") ;;
+            package.json|requirements.txt|Gemfile|composer.json|*.toml|*.yaml|*.yml)
+                config_files+=("$file") ;;
+
+            # Test files
+            **/*test*|**/*spec*|**/tests/**|**/__tests__/**|*.test.*|*.spec.*)
+                test_files+=("$file") ;;
+
+            # Documentation
+            *.md|*.rst|*.txt|docs/**|**/docs/**)
+                doc_files+=("$file") ;;
+
+            # Core application files
+            *.js|*.ts|*.jsx|*.tsx|*.py|*.rb|*.php|*.java|*.go|*.rs|*.c|*.cpp|*.h)
+                core_files+=("$file") ;;
+
+            # Everything else
+            *)
+                other_files+=("$file") ;;
+        esac
+    done <<< "$(git diff --staged --name-only)"
+
+    _debug_log "Categorized files: core=${#core_files[@]}, config=${#config_files[@]}, test=${#test_files[@]}, docs=${#doc_files[@]}, generated=${#generated_files[@]}, other=${#other_files[@]}"
+
+    # Build intelligent summary
+    local summary=""
+
+    # Add statistics header
+    summary+="COMMIT ANALYSIS:\n"
+    summary+="Files: $files_changed changed (+$lines_added/-$lines_removed lines)\n\n"
+
+    # Prioritize core files - get actual meaningful changes
+    if [[ ${#core_files[@]} -gt 0 ]]; then
+        summary+="CORE CHANGES:\n"
+        for file in "${core_files[@]:0:10}"; do  # Limit to first 10 core files
+            local file_diff=$(git diff --staged "$file" | head -n 20)  # First 20 lines of each file
+            if [[ -n "$file_diff" ]]; then
+                summary+="File: $file\n"
+                summary+="$(echo "$file_diff" | grep '^[+-]' | head -n 8)\n\n"  # Show actual changes
+            fi
+        done
+
+        # If we have many core files, just list the rest
+        if [[ ${#core_files[@]} -gt 10 ]]; then
+            summary+="Additional core files: ${core_files[@]:10}\n\n"
+        fi
+    fi
+
+    # Summarize other categories
+    if [[ ${#config_files[@]} -gt 0 ]]; then
+        summary+="CONFIG CHANGES:\n"
+        printf '%s\n' "${config_files[@]}" | head -n 5
+        summary+="\n"
+        [[ ${#config_files[@]} -gt 5 ]] && summary+="(+$((${#config_files[@]} - 5)) more config files)\n\n"
+    fi
+
+    if [[ ${#test_files[@]} -gt 0 ]]; then
+        summary+="TEST CHANGES:\n"
+        printf '%s\n' "${test_files[@]}" | head -n 5
+        summary+="\n"
+        [[ ${#test_files[@]} -gt 5 ]] && summary+="(+$((${#test_files[@]} - 5)) more test files)\n\n"
+    fi
+
+    if [[ ${#doc_files[@]} -gt 0 ]]; then
+        summary+="DOCUMENTATION:\n"
+        printf '%s\n' "${doc_files[@]}"
+        summary+="\n\n"
+    fi
+
+    if [[ ${#generated_files[@]} -gt 0 ]]; then
+        summary+="GENERATED/DEPS: ${#generated_files[@]} files (package-lock.json, etc.)\n\n"
+    fi
+
+    # Detect common patterns
+    if [[ $files_changed -gt 20 ]]; then
+        summary+="PATTERN: Large refactoring or migration (${files_changed} files)\n"
+    elif [[ ${#test_files[@]} -gt ${#core_files[@]} ]]; then
+        summary+="PATTERN: Test-heavy changes\n"
+    elif [[ ${#doc_files[@]} -gt 0 && ${#core_files[@]} -eq 0 ]]; then
+        summary+="PATTERN: Documentation-only changes\n"
+    elif [[ ${#config_files[@]} -gt ${#core_files[@]} ]]; then
+        summary+="PATTERN: Configuration/setup changes\n"
+    fi
+
+    _debug_log "Generated smart summary, length: ${#summary}"
+    echo "$summary"
+    return 0
 }
 

@@ -1,0 +1,1 @@
+Test the smart diff analysis with a large diff scenario
