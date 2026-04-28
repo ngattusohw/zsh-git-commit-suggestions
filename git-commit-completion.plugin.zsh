@@ -1158,7 +1158,7 @@ _test_anthropic_key() {
         -H "x-api-key: $token" \
         -H "Content-Type: application/json" \
         -H "anthropic-version: 2023-06-01" \
-        -d '{"model":"claude-3-5-haiku-20241022","max_tokens":1,"messages":[{"role":"user","content":"test"}]}' \
+        -d '{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"test"}]}' \
         -o "$response_file" \
         "https://api.anthropic.com/v1/messages" 2>&1)
 
@@ -1715,7 +1715,7 @@ _anthropic_generate() {
     fi
 
     # Test with minimal request first
-    local test_request='{"model":"claude-3-5-haiku-20241022","max_tokens":10,"messages":[{"role":"user","content":"test"}]}'
+    local test_request='{"model":"claude-haiku-4-5-20251001","max_tokens":10,"messages":[{"role":"user","content":"test"}]}'
 
     local test_response
     test_response=$(curl -s -S -H "Content-Type: application/json" \
@@ -1751,7 +1751,7 @@ _anthropic_generate() {
     # Write JSON to temp file - Anthropic format
     cat > "$tmp_json" << EOF
 {
-    "model": "claude-3-5-haiku-20241022",
+    "model": "claude-haiku-4-5-20251001",
     "max_tokens": 200,
     "messages": [
         {
@@ -2090,7 +2090,7 @@ _run_background_suggestion() {
                 # Construct JSON properly without placeholders
                 cat > "$tmp_json" << EOF
 {
-    "model": "claude-3-5-haiku-20241022",
+    "model": "claude-haiku-4-5-20251001",
     "max_tokens": 200,
     "messages": [
         {
